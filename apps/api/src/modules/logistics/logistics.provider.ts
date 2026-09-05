@@ -1,5 +1,13 @@
 import type { DeliveryAddressSnapshotDto, ShipmentProviderDto, ShipmentStatusDto } from "@repo/contracts";
 
+export type LogisticsJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly LogisticsJsonValue[]
+  | { readonly [key: string]: LogisticsJsonValue };
+
 export interface LogisticsStation {
   readonly id: number;
   readonly name: string;
@@ -32,7 +40,7 @@ export interface LogisticsQuoteResult {
   readonly currency: string;
   readonly serviceCode?: string;
   readonly providerQuoteReference?: string;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata?: LogisticsJsonValue;
 }
 
 export interface LogisticsCreateShipmentInput {
@@ -48,7 +56,7 @@ export interface LogisticsCreateShipmentResult {
   readonly providerShipmentReference: string;
   readonly trackingNumber?: string;
   readonly status: ShipmentStatusDto;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata?: LogisticsJsonValue;
 }
 
 export interface LogisticsTrackingResult {
@@ -57,7 +65,7 @@ export interface LogisticsTrackingResult {
   readonly location?: string;
   readonly eventTime: Date;
   readonly providerStatusCode?: string;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata?: LogisticsJsonValue;
 }
 
 export interface LogisticsProviderAdapter {
@@ -66,6 +74,18 @@ export interface LogisticsProviderAdapter {
   createShipment(input: LogisticsCreateShipmentInput): Promise<LogisticsCreateShipmentResult>;
   trackShipment(reference: string): Promise<LogisticsTrackingResult>;
   getStations?(): Promise<readonly LogisticsStation[]>;
+}
+
+function jsonSafe(value: unknown): LogisticsJsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
+  if (Array.isArray(value)) return value.map(jsonSafe);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, jsonSafe(item)]),
+    );
+  }
+  return String(value);
 }
 
 function addressText(address: DeliveryAddressSnapshotDto): string {
@@ -175,7 +195,7 @@ export class GiglAdapter implements LogisticsProviderAdapter {
       currency: input.currency,
       serviceCode: firstString(data, ["ServiceCode", "DeliveryOption", "VehicleType"]),
       providerQuoteReference: firstString(data, ["QuoteReference", "Reference", "RequestId"]),
-      metadata: { raw: data },
+      metadata: { raw: jsonSafe(data) },
     };
   }
 
@@ -194,7 +214,7 @@ export class GiglAdapter implements LogisticsProviderAdapter {
       location: firstString(latest, ["Location", "ServiceCentre", "StationName"]),
       eventTime: new Date(firstString(latest, ["ScanDate", "DateCreated", "DateTime"]) ?? Date.now()),
       providerStatusCode: code,
-      metadata: { raw: latest },
+      metadata: { raw: jsonSafe(latest) },
     };
   }
 }
