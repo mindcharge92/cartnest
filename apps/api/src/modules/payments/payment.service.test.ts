@@ -30,9 +30,11 @@ function intent() {
     order: {
       id: ORDER_ID,
       userId: USER_ID,
+      status: "PENDING_PAYMENT" as const,
       paymentStatus: "PENDING" as const,
       user: { id: USER_ID, email: "buyer@example.com", phone: "+2348000000000" },
       vendorOrders: [],
+      reservations: [],
     },
     attempts: [],
     allocations: [],
@@ -149,5 +151,39 @@ describe("P7 safe provider routing", () => {
 
     expect(flutterwaveInitialize).not.toHaveBeenCalled();
     expect(repo.markInitializationAmbiguous).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to initialize when the checkout reservation has expired", async () => {
+    const repo = repository({
+      beginInitialization: vi.fn().mockResolvedValue({ kind: "reservation_expired" }),
+    });
+    const paystackInitialize = vi.fn();
+    const service = new PaymentService(
+      repo,
+      [adapter("PAYSTACK", paystackInitialize)],
+      "https://cartnest.example/payment/callback",
+    );
+
+    await expect(
+      service.initialize(principal, INTENT_ID, {}, "payment-key-expired"),
+    ).rejects.toMatchObject({ code: "PAYMENT_RESERVATION_EXPIRED", statusCode: 409 });
+    expect(paystackInitialize).not.toHaveBeenCalled();
+  });
+
+  it("refuses to initialize a cancelled or otherwise non-payable order", async () => {
+    const repo = repository({
+      beginInitialization: vi.fn().mockResolvedValue({ kind: "not_payable" }),
+    });
+    const paystackInitialize = vi.fn();
+    const service = new PaymentService(
+      repo,
+      [adapter("PAYSTACK", paystackInitialize)],
+      "https://cartnest.example/payment/callback",
+    );
+
+    await expect(
+      service.initialize(principal, INTENT_ID, {}, "payment-key-closed"),
+    ).rejects.toMatchObject({ code: "PAYMENT_NOT_PAYABLE", statusCode: 409 });
+    expect(paystackInitialize).not.toHaveBeenCalled();
   });
 });
