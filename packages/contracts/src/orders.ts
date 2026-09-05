@@ -98,6 +98,8 @@ export const VendorOrderSchema = Type.Object(
     vendorId: UuidSchema,
     store: PublicStoreSummarySchema,
     status: VendorOrderStatusSchema,
+    orderStatus: OrderStatusSchema,
+    paymentStatus: PaymentStatusSchema,
     itemSubtotal: MoneySchema,
     discount: MoneySchema,
     delivery: MoneySchema,
