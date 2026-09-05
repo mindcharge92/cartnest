@@ -19,6 +19,10 @@ ALTER TABLE "InventoryItem"
 ALTER TABLE "InventoryAdjustment"
   ADD CONSTRAINT "InventoryAdjustment_delta_nonzero" CHECK ("delta" <> 0);
 
+CREATE UNIQUE INDEX "InventoryAdjustment_return_restock_once"
+  ON "InventoryAdjustment" ("referenceType", "referenceId")
+  WHERE "referenceType" = 'RETURN_RESTOCK' AND "referenceId" IS NOT NULL;
+
 CREATE UNIQUE INDEX "Cart_one_active_per_user"
   ON "Cart" ("userId")
   WHERE "status" = 'ACTIVE';
@@ -104,9 +108,7 @@ CREATE UNIQUE INDEX "ProviderEvent_provider_fingerprint_fallback_unique"
   ON "ProviderEvent" ("provider", "fingerprint")
   WHERE "externalEventId" IS NULL AND "fingerprint" IS NOT NULL;
 
--- P8 logistics constraints. The P8 extension models intentionally keep scalar
--- ownership IDs so the multi-file schema does not introduce reverse relations
--- into earlier domain files; these foreign keys restore relational integrity.
+-- P8 logistics constraints.
 ALTER TABLE "StoreFulfillmentProfile"
   ADD CONSTRAINT "StoreFulfillmentProfile_store_fk"
     FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE,
@@ -150,8 +152,26 @@ ALTER TABLE "ShipmentItem"
     FOREIGN KEY ("orderItemId") REFERENCES "OrderItem"("id") ON DELETE RESTRICT,
   ADD CONSTRAINT "ShipmentItem_quantity_positive" CHECK ("quantity" > 0);
 
+-- P9 returns/refunds/reviews constraints.
 ALTER TABLE "ReturnItem"
   ADD CONSTRAINT "ReturnItem_quantity_positive" CHECK ("quantity" > 0);
+
+ALTER TABLE "ReturnRequest"
+  ADD CONSTRAINT "ReturnRequest_approved_timestamp_consistency"
+    CHECK ("approvedAt" IS NULL OR "approvedAt" >= "requestedAt"),
+  ADD CONSTRAINT "ReturnRequest_received_timestamp_consistency"
+    CHECK ("receivedAt" IS NULL OR "receivedAt" >= "requestedAt"),
+  ADD CONSTRAINT "ReturnRequest_completed_timestamp_consistency"
+    CHECK ("completedAt" IS NULL OR "completedAt" >= "requestedAt");
+
+ALTER TABLE "Refund"
+  ADD CONSTRAINT "Refund_amount_positive" CHECK ("amountMinor" > 0),
+  ADD CONSTRAINT "Refund_completed_timestamp_consistency"
+    CHECK ("completedAt" IS NULL OR "completedAt" >= "createdAt");
+
+CREATE INDEX "Refund_processing_reconciliation_idx"
+  ON "Refund" ("updatedAt")
+  WHERE "status" = 'PROCESSING';
 
 ALTER TABLE "ProductReview"
   ADD CONSTRAINT "ProductReview_rating_range" CHECK ("rating" BETWEEN 1 AND 5);
@@ -163,8 +183,7 @@ CREATE UNIQUE INDEX "WishlistItem_product_without_variant_unique"
   ON "WishlistItem" ("wishlistId", "productId")
   WHERE "variantId" IS NULL;
 
--- P4 catalog indexes. The public catalog always filters on active products with
--- publishable moderation states, and text search uses case-insensitive contains.
+-- P4 catalog indexes.
 CREATE INDEX "Product_public_catalog_created_idx"
   ON "Product" ("createdAt" DESC)
   WHERE "status" = 'ACTIVE'
