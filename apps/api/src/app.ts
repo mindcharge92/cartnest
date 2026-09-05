@@ -13,6 +13,8 @@ import {
 import type { DatabaseClient } from "@repo/database";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import rawBodyPlugin from "fastify-raw-body";
+import { registerAdminOperationsRoutes } from "./modules/admin/admin.operations.routes.js";
+import { AdminOperationsService } from "./modules/admin/admin.operations.service.js";
 import { registerAdminRoutes } from "./modules/admin/admin.routes.js";
 import { AdminService } from "./modules/admin/admin.service.js";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
@@ -282,6 +284,7 @@ export function buildApp(
         )
       : undefined;
   const adminService = database && vendorBoundary ? new AdminService(database, vendorBoundary) : undefined;
+  const adminOperationsService = database ? new AdminOperationsService(database) : undefined;
   const notificationService = database ? new NotificationService(database) : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
@@ -299,6 +302,7 @@ export function buildApp(
   });
   registerReturnsRoutes(app, { service: returnsService, authService });
   registerAdminRoutes(app, { service: adminService, authService });
+  registerAdminOperationsRoutes(app, { service: adminOperationsService, authService });
   registerNotificationRoutes(app, { service: notificationService, authService });
 
   async function dependencyStates() {
