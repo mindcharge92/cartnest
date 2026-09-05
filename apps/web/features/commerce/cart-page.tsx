@@ -231,9 +231,11 @@ export function CartPageContent() {
               </div>
             ) : <p className="formMessage">Checkout readiness is temporarily unavailable. Your cart is still preserved.</p>}
 
-            <button className="primaryButton" type="button" disabled title="Order creation and payment continue in FP6/FP7 integration.">
-              Checkout integration next
-            </button>
+            {preview?.ready ? (
+              <Link className="primaryButton" href="/checkout">Continue to checkout</Link>
+            ) : (
+              <button className="primaryButton" type="button" disabled>Checkout unavailable</button>
+            )}
           </aside>
         </div>
       )}
