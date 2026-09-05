@@ -42,8 +42,16 @@ function normalizedAddress(address: DeliveryAddressSnapshotDto): DeliveryAddress
   };
 }
 
-function addressFingerprint(address: DeliveryAddressSnapshotDto): string {
-  return JSON.stringify(normalizedAddress(address));
+function hasRequiredAddress(address: DeliveryAddressSnapshotDto): boolean {
+  const normalized = normalizedAddress(address);
+  return (
+    normalized.recipientName.length >= 2 &&
+    normalized.phone.length >= 7 &&
+    normalized.line1.length >= 2 &&
+    normalized.city.length >= 2 &&
+    normalized.state.length >= 2 &&
+    normalized.countryCode === "NG"
+  );
 }
 
 function shippingTotal(quote: ShippingQuoteResponseDto): { amountMinor: string; currency: string } | null {
@@ -63,7 +71,6 @@ export function CheckoutPageContent() {
   const [address, setAddress] = useState<DeliveryAddressSnapshotDto>(EMPTY_ADDRESS);
   const [promotionCode, setPromotionCode] = useState("");
   const [quote, setQuote] = useState<ShippingQuoteResponseDto | null>(null);
-  const [quoteForAddress, setQuoteForAddress] = useState<string | null>(null);
   const [stations, setStations] = useState<readonly LogisticsStationDto[] | null>(null);
   const [receiverStationId, setReceiverStationId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -88,7 +95,6 @@ export function CheckoutPageContent() {
 
   function invalidateDeliveryQuote() {
     setQuote(null);
-    setQuoteForAddress(null);
   }
 
   function setAddressField<K extends keyof DeliveryAddressSnapshotDto>(
@@ -100,18 +106,29 @@ export function CheckoutPageContent() {
     setMessage(null);
   }
 
-  async function loadStations(): Promise<void> {
-    if (stations !== null) return;
+  async function loadStations(): Promise<boolean> {
+    if (stations !== null) return true;
     try {
       const response = await logisticsApi.listStations();
       setStations(response.items);
+      if (response.items.length === 0) {
+        setMessage("GIGL did not return any receiver stations. Delivery cannot be quoted for the GIGL store right now.");
+        return false;
+      }
+      return true;
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not load GIGL receiver stations."));
+      return false;
     }
   }
 
   async function requestDeliveryQuote(): Promise<ShippingQuoteResponseDto | null> {
     const deliveryAddress = normalizedAddress(address);
+    if (!hasRequiredAddress(deliveryAddress)) {
+      setMessage("Complete the recipient name, phone, street address, city and state before calculating delivery.");
+      return null;
+    }
+
     setBusy((current) => current ?? "quote");
     setMessage(null);
     try {
@@ -120,17 +137,17 @@ export function CheckoutPageContent() {
         ...(receiverStationId ? { receiverStationId: Number(receiverStationId) } : {}),
       });
       setQuote(next);
-      setQuoteForAddress(addressFingerprint(deliveryAddress));
       return next;
     } catch (caught) {
       if (apiErrorCode(caught) === "GIGL_STATION_REQUIRED") {
-        await loadStations();
-        setMessage("A store in this cart ships with GIGL. Select your receiver station, then calculate delivery again.");
+        const loaded = await loadStations();
+        if (loaded) {
+          setMessage("A store in this cart ships with GIGL. Select your receiver station, then calculate delivery again.");
+        }
       } else {
         setMessage(apiErrorMessage(caught, "CartNest could not calculate delivery for this cart."));
       }
       setQuote(null);
-      setQuoteForAddress(null);
       return null;
     } finally {
       setBusy((current) => current === "quote" ? null : current);
@@ -152,14 +169,9 @@ export function CheckoutPageContent() {
     setMessage(null);
     try {
       const deliveryAddress = normalizedAddress(address);
-      const currentFingerprint = addressFingerprint(deliveryAddress);
-      let currentQuote = quote;
-      if (!currentQuote || quoteForAddress !== currentFingerprint) {
-        currentQuote = await requestDeliveryQuote();
-      } else {
-        // Refresh the quote immediately before reserving inventory so checkout never relies on a stale delivery quote.
-        currentQuote = await requestDeliveryQuote();
-      }
+      // Always refresh delivery immediately before creating the order. The backend
+      // independently resolves the latest matching unexpired quote and remains authoritative.
+      const currentQuote = await requestDeliveryQuote();
       if (!currentQuote) return;
 
       const body = {
@@ -243,7 +255,7 @@ export function CheckoutPageContent() {
 
               {stations !== null ? (
                 <label className="field checkoutStationField">GIGL receiver station
-                  <select value={receiverStationId} onChange={(event) => { setReceiverStationId(event.target.value); invalidateDeliveryQuote(); }}>
+                  <select required value={receiverStationId} onChange={(event) => { setReceiverStationId(event.target.value); invalidateDeliveryQuote(); }}>
                     <option value="">Select a receiver station</option>
                     {stations.map((station) => <option key={station.id} value={station.id}>{station.name}{station.state ? ` · ${station.state}` : ""}</option>)}
                   </select>
