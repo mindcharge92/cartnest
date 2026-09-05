@@ -58,7 +58,6 @@ export class PrismaLogisticsRepository {
   async createQuote(input: {
     userId: string;
     cartId: string;
-    cartUpdatedAt: Date;
     storeId: string;
     provider: ShipmentProviderDto;
     amountMinor: bigint;
@@ -69,11 +68,15 @@ export class PrismaLogisticsRepository {
     expiresAt: Date;
     metadata?: Prisma.InputJsonValue;
   }) {
+    const cart = await this.database.cart.findFirstOrThrow({
+      where: { id: input.cartId, userId: input.userId, status: "ACTIVE" },
+      select: { updatedAt: true },
+    });
     return this.database.shippingQuote.create({
       data: {
         userId: input.userId,
         cartId: input.cartId,
-        cartUpdatedAt: input.cartUpdatedAt,
+        cartUpdatedAt: cart.updatedAt,
         storeId: input.storeId,
         provider: input.provider,
         amountMinor: input.amountMinor,
