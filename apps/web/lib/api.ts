@@ -1,9 +1,12 @@
 import {
   CartNestApiError,
+  createCartApi,
   createCartNestApiClient,
   createCatalogApi,
   createContractRequestClient,
+  createInventoryApi,
   createVendorApi,
+  createWishlistApi,
 } from "@repo/api-client";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000").replace(/\/+$/, "");
@@ -31,6 +34,9 @@ export const api = createCartNestApiClient({ baseUrl: API_BASE_URL, fetch: brows
 const contractApi = createContractRequestClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
 export const vendorApi = createVendorApi(contractApi);
 export const catalogApi = createCatalogApi(contractApi);
+export const inventoryApi = createInventoryApi(contractApi);
+export const wishlistApi = createWishlistApi(contractApi);
+export const cartApi = createCartApi(contractApi);
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof CartNestApiError) return error.message;
