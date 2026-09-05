@@ -1,0 +1,313 @@
+.ordersToolbar,
+.vendorOrderFilters {
+  display: flex;
+  gap: 0.9rem;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.ordersToolbar .field,
+.vendorOrderFilters .field {
+  min-width: min(100%, 16rem);
+}
+
+.orderCardList,
+.vendorOrderList,
+.orderVendorStack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.orderSummaryCard,
+.vendorOrderQueueCard {
+  display: grid;
+  gap: 1rem;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.orderSummaryCard:hover,
+.vendorOrderQueueCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--brand);
+  box-shadow: 0 12px 30px rgba(20, 42, 27, 0.07);
+}
+
+.orderSummaryCard:focus-visible,
+.vendorOrderQueueCard:focus-visible {
+  outline: 3px solid var(--brand-soft);
+  outline-offset: 2px;
+}
+
+.orderSummaryTop,
+.vendorOrderQueueTop,
+.orderSummaryBottom,
+.vendorOrderQueueBottom,
+.orderBadgeRow,
+.orderDetailBadges,
+.paginationRow,
+.paymentStateHeader,
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.orderSummaryTop,
+.vendorOrderQueueTop,
+.paymentStateHeader {
+  justify-content: space-between;
+}
+
+.orderSummaryTop > div:first-child,
+.vendorOrderQueueTop > div:first-child,
+.orderSummaryBottom > div,
+.vendorOrderQueueBottom > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.orderSummaryBottom,
+.vendorOrderQueueBottom {
+  justify-content: space-between;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.orderOpenLabel {
+  color: var(--brand);
+  font-weight: 760;
+  margin-left: auto;
+}
+
+.paginationRow {
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.orderDetailLayout,
+.vendorOrderDetailLayout,
+.paymentLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem);
+  gap: 1rem;
+  align-items: start;
+}
+
+.orderInfoPanel,
+.paymentMainPanel,
+.paymentCallbackPanel {
+  display: grid;
+  gap: 1rem;
+}
+
+.orderAddress {
+  display: grid;
+  gap: 0.25rem;
+  font-style: normal;
+  line-height: 1.55;
+}
+
+.reservationNotice {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.orderVendorCard {
+  overflow: hidden;
+}
+
+.orderItemList {
+  display: grid;
+}
+
+.orderItemRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  padding: 0.9rem 1.05rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.orderItemRow:last-child {
+  border-bottom: 0;
+}
+
+.orderItemRow > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.orderItemRow span,
+.vendorFinancialMeta span,
+.orderMetadata span {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.vendorOrderTotals {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem 1.05rem 1.05rem;
+  background: var(--surface-muted);
+}
+
+.vendorOrderTotals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vendorOrderTotal {
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
+.vendorFinancialMeta,
+.orderMetadata {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.cancelOrderForm,
+.paymentActionStack,
+.paymentReconcileBox {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cancelOrderForm,
+.paymentReconcileBox {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.paymentPage,
+.paymentCallbackPage {
+  min-height: 60vh;
+}
+
+.paymentMainPanel h2,
+.paymentCallbackPanel h2 {
+  margin: 0.15rem 0 0;
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+}
+
+.paymentOutcome {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.paymentOutcome strong {
+  font-size: 1rem;
+}
+
+.paymentOutcome p,
+.paymentReconcileBox p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.paymentOutcomeGood {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 24%, var(--line));
+}
+
+.paymentOutcomeWarning {
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--line));
+}
+
+.paymentOutcomeDanger {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 25%, var(--line));
+}
+
+.paymentSafetyPanel,
+.orderTotalPanel,
+.vendorOrderFinancials {
+  position: sticky;
+  top: 5.4rem;
+}
+
+.paymentCallbackPanel {
+  max-width: 48rem;
+  margin-inline: auto;
+}
+
+.paymentReconcileBox {
+  margin-top: 0.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orderSummaryCard,
+  .vendorOrderQueueCard {
+    transition: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .orderDetailLayout,
+  .vendorOrderDetailLayout,
+  .paymentLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .paymentSafetyPanel,
+  .orderTotalPanel,
+  .vendorOrderFinancials {
+    position: static;
+  }
+}
+
+@media (max-width: 680px) {
+  .orderSummaryTop,
+  .vendorOrderQueueTop,
+  .orderSummaryBottom,
+  .vendorOrderQueueBottom,
+  .paginationRow,
+  .paymentStateHeader,
+  .orderItemRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .orderOpenLabel {
+    margin-left: 0;
+  }
+
+  .paginationRow {
+    align-items: stretch;
+  }
+
+  .paginationRow .secondaryButton {
+    width: 100%;
+  }
+
+  .orderItemRow > strong {
+    align-self: flex-end;
+  }
+
+  .actionRow > * {
+    flex: 1 1 100%;
+  }
+}
