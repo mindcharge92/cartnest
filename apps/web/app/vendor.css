@@ -1,0 +1,105 @@
+.sellerHome { display: grid; gap: 1.5rem; }
+.sellerPageHeader, .workspacePageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
+.sellerPageHeader > div:first-child, .workspacePageHeader > div:first-child { max-width: 48rem; }
+.sellerCardGrid, .storeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.sellerCard, .storeCard { min-height: 15rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1.2rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); padding: 1.25rem; }
+.sellerCard h2, .storeCard h3 { margin: 0; letter-spacing: -0.025em; }
+.sellerCard p, .storeCard p { margin: 0.4rem 0 0; color: var(--text-soft); line-height: 1.55; }
+.sellerCardTopline, .vendorBadgeRow { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.sellerCardMeta { display: grid; gap: 0.25rem; color: var(--text-soft); font-size: 0.82rem; }
+.statusPillWarning { background: #fff2d8; color: #87520c; }
+.statusPillDanger { background: var(--danger-soft); color: var(--danger); }
+.storeSlug { color: var(--text-soft); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+.sellerOnboardingGrid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(22rem, 1.1fr); gap: clamp(2rem, 6vw, 5rem); align-items: start; }
+.sellerLead { max-width: 42rem; color: var(--text-soft); line-height: 1.75; }
+.sellerStepList { display: grid; gap: 0; margin: 2rem 0 0; padding: 0; list-style: none; counter-reset: vendor-step; }
+.sellerStepList li { counter-increment: vendor-step; display: grid; grid-template-columns: 2.5rem 1fr; column-gap: 0.8rem; padding: 1rem 0; border-top: 1px solid var(--line); }
+.sellerStepList li::before { content: counter(vendor-step); width: 2.1rem; height: 2.1rem; display: grid; place-items: center; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-weight: 850; }
+.sellerStepList strong, .sellerStepList span { grid-column: 2; }
+.sellerStepList span { margin-top: 0.2rem; color: var(--text-soft); line-height: 1.55; }
+.sellerForm { display: grid; gap: 1rem; }
+.sellerForm h2 { margin: 0; letter-spacing: -0.03em; }
+.fieldOptional { color: var(--text-soft); font-size: 0.78rem; font-weight: 520; }
+.formGrid { display: grid; gap: 1rem; }
+.formGridTwo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.vendorWorkspace { display: grid; grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr); gap: 2rem; align-items: start; }
+.vendorSidebar { position: sticky; top: 5.5rem; display: grid; gap: 1rem; }
+.vendorIdentity { display: grid; gap: 0.7rem; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.vendorIdentity h2 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.vendorBackLink { color: var(--text-soft); font-size: 0.82rem; text-decoration: none; }
+.vendorBackLink:hover { color: var(--brand); }
+.vendorBadgeRow { justify-content: flex-start; }
+.vendorNav { display: grid; gap: 0.25rem; }
+.vendorNavLink { display: flex; min-height: 2.6rem; align-items: center; border-radius: 0.65rem; padding: 0.6rem 0.75rem; color: #46544b; text-decoration: none; font-weight: 680; }
+.vendorNavLink:hover { background: var(--surface-muted); color: var(--text); }
+.vendorNavLink[aria-current="page"] { background: var(--brand-soft); color: var(--brand-dark); }
+.vendorContent { min-width: 0; display: grid; gap: 1.5rem; }
+.workspacePageHeader { padding-bottom: 0.5rem; }
+.workspaceSection { display: grid; gap: 1rem; }
+.sectionHeadingCompact { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+.sectionHeadingCompact h2 { margin: 0; font-size: 1.35rem; letter-spacing: -0.03em; }
+.sectionHeadingCompact p { margin: 0.35rem 0 0; color: var(--text-soft); line-height: 1.55; }
+.workspaceSplit { display: grid; grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr); gap: 1rem; align-items: start; }
+
+.metricGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
+.metricCard { display: grid; gap: 0.45rem; min-height: 9rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); padding: 1rem; }
+.metricCard span { color: var(--text-soft); font-size: 0.78rem; font-weight: 750; text-transform: uppercase; letter-spacing: 0.05em; }
+.metricCard strong { font-size: 1.7rem; letter-spacing: -0.04em; }
+.metricCard small { color: var(--text-soft); line-height: 1.45; }
+.calloutCard { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid #cfe1d3; border-radius: var(--radius-md); background: var(--brand-soft); padding: 1rem; }
+.calloutCard p { margin: 0.25rem 0 0; color: #45604c; }
+.checklistGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+.checklistCard { display: grid; grid-template-columns: 2.25rem 1fr; gap: 0.75rem; align-items: start; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); padding: 1rem; color: inherit; text-decoration: none; }
+.checklistCard:not(.checklistCardStatic):hover { border-color: #b8cfbd; box-shadow: 0 8px 30px rgba(20, 42, 27, 0.06); }
+.checklistCard p { margin: 0.25rem 0 0; color: var(--text-soft); line-height: 1.5; font-size: 0.88rem; }
+.checkMark { width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 999px; background: var(--surface-muted); color: var(--text-soft); font-weight: 850; }
+.checkMarkDone { background: var(--brand-soft); color: var(--brand-dark); }
+
+.verificationList, .memberList { display: grid; gap: 0.7rem; }
+.verificationRow { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--line); padding: 0.9rem 0; }
+.verificationRow > div { display: grid; gap: 0.25rem; }
+.verificationRow small, .verificationMeta small { color: var(--text-soft); }
+.verificationMeta { justify-items: end; }
+.storeCreateForm { margin-bottom: 0.5rem; }
+
+.permissionGroups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.permissionGroup { min-width: 0; display: grid; align-content: start; gap: 0.55rem; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0.85rem; }
+.permissionGroup legend { padding-inline: 0.35rem; color: #405047; font-size: 0.82rem; font-weight: 850; }
+.permissionOption { display: grid; grid-template-columns: 1.1rem minmax(0, 1fr); gap: 0.55rem; align-items: start; cursor: pointer; }
+.permissionOption input { width: 1rem; min-height: auto; height: 1rem; margin-top: 0.15rem; }
+.permissionOption span { display: grid; gap: 0.1rem; }
+.permissionOption strong { font-size: 0.86rem; }
+.permissionOption small { color: var(--text-soft); line-height: 1.4; }
+.permissionGroup:disabled { opacity: 0.65; }
+.memberCard { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+.memberSummary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; cursor: pointer; list-style: none; }
+.memberSummary::-webkit-details-marker { display: none; }
+.memberSummary > span:first-child { display: grid; gap: 0.15rem; }
+.memberSummary small { color: var(--text-soft); }
+.memberEditorBody { display: grid; gap: 1rem; padding: 0 1rem 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+
+@media (max-width: 1000px) {
+  .sellerCardGrid, .storeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .checklistGrid { grid-template-columns: 1fr; }
+  .workspaceSplit { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .sellerOnboardingGrid { grid-template-columns: 1fr; }
+  .vendorWorkspace { grid-template-columns: 1fr; }
+  .vendorSidebar { position: static; }
+  .vendorNav { display: flex; overflow-x: auto; padding-bottom: 0.25rem; }
+  .vendorNavLink { white-space: nowrap; }
+  .sellerPageHeader, .workspacePageHeader { flex-direction: column; }
+  .permissionGroups { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .sellerCardGrid, .storeGrid, .metricGrid, .formGridTwo { grid-template-columns: 1fr; }
+  .verificationRow, .calloutCard { align-items: flex-start; flex-direction: column; }
+  .verificationMeta { justify-items: start; }
+  .memberSummary { align-items: flex-start; }
+}
