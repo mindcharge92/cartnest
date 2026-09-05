@@ -11,7 +11,7 @@ import {
   SystemInfoResponseSchema,
 } from "@repo/contracts";
 import type { DatabaseClient } from "@repo/database";
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
@@ -22,10 +22,7 @@ export interface ReadinessProbes {
 }
 
 const unavailableProbe = async () => false;
-const defaultProbes: ReadinessProbes = {
-  database: unavailableProbe,
-  redis: unavailableProbe,
-};
+const defaultProbes: ReadinessProbes = { database: unavailableProbe, redis: unavailableProbe };
 
 export function buildApp(
   options: FastifyServerOptions = {},
@@ -37,7 +34,28 @@ export function buildApp(
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
-  void registerSecurityPlugins(app, environment);
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error.validation) {
+      return reply.code(400).send({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "The request does not match the required contract.",
+          requestId: request.id,
+          details: error.validation,
+        },
+      });
+    }
+    request.log.error({ err: error }, "Unhandled request error");
+    return reply.code(error.statusCode && error.statusCode >= 400 ? error.statusCode : 500).send({
+      error: {
+        code: error.statusCode === 429 ? "RATE_LIMITED" : "INTERNAL_ERROR",
+        message: error.statusCode === 429 ? "Too many requests." : "An unexpected error occurred.",
+        requestId: request.id,
+      },
+    });
+  });
+
+  registerSecurityPlugins(app, environment);
 
   void app.register(swagger, {
     openapi: {
@@ -60,75 +78,32 @@ export function buildApp(
     });
   }
 
-  const authService = database
-    ? new AuthService(new PrismaAuthRepository(database), environment)
-    : undefined;
+  const authService = database ? new AuthService(new PrismaAuthRepository(database), environment) : undefined;
   registerAuthRoutes(app, { service: authService, environment });
 
   async function dependencyStates() {
-    const [databaseReady, redisReady] = await Promise.all([
-      probes.database(),
-      probes.redis(),
-    ]);
+    const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
     return {
       database: databaseReady ? ("ready" as const) : ("unavailable" as const),
       redis: redisReady ? ("ready" as const) : ("unavailable" as const),
     };
   }
 
-  app.get(
-    "/health",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getHealth",
-        response: { 200: HealthResponseSchema },
-      },
-    },
-    async () => ({
-      status: "ok" as const,
-      service: "cartnest-api" as const,
-      uptimeSeconds: Math.floor(process.uptime()),
-    }),
-  );
+  app.get("/health", {
+    schema: { tags: ["system"], operationId: "getHealth", response: { 200: HealthResponseSchema } },
+  }, async () => ({ status: "ok" as const, service: "cartnest-api" as const, uptimeSeconds: Math.floor(process.uptime()) }));
 
-  app.get(
-    "/ready",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getReadiness",
-        response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
-      },
-    },
-    async (_request, reply) => {
-      const dependencies = await dependencyStates();
-      const ready = dependencies.database === "ready" && dependencies.redis === "ready";
-      const body = {
-        status: ready ? ("ready" as const) : ("not-ready" as const),
-        service: "cartnest-api" as const,
-        dependencies,
-      };
-      return reply.code(ready ? 200 : 503).send(body);
-    },
-  );
+  app.get("/ready", {
+    schema: { tags: ["system"], operationId: "getReadiness", response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema } },
+  }, async (_request, reply) => {
+    const dependencies = await dependencyStates();
+    const ready = dependencies.database === "ready" && dependencies.redis === "ready";
+    return reply.code(ready ? 200 : 503).send({ status: ready ? ("ready" as const) : ("not-ready" as const), service: "cartnest-api" as const, dependencies });
+  });
 
-  app.get(
-    "/api/v1/system/info",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getSystemInfo",
-        response: { 200: SystemInfoResponseSchema },
-      },
-    },
-    async () => ({
-      service: "cartnest-api" as const,
-      apiVersion: "v1" as const,
-      timestamp: new Date().toISOString(),
-      dependencies: await dependencyStates(),
-    }),
-  );
+  app.get("/api/v1/system/info", {
+    schema: { tags: ["system"], operationId: "getSystemInfo", response: { 200: SystemInfoResponseSchema } },
+  }, async () => ({ service: "cartnest-api" as const, apiVersion: "v1" as const, timestamp: new Date().toISOString(), dependencies: await dependencyStates() }));
 
   return app;
 }

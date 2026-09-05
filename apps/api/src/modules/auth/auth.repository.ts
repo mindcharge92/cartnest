@@ -56,6 +56,7 @@ export interface AuthRepository {
   findUserByIdentifier(normalizedIdentifier: string): Promise<AuthUserRecord | null>;
   findUserById(userId: string): Promise<AuthUserRecord | null>;
   findUserByNormalizedEmail(normalizedEmail: string): Promise<AuthUserRecord | null>;
+  findSession(sessionId: string, userId: string): Promise<SessionRecord | null>;
   createUser(input: CreateUserInput): Promise<AuthUserRecord>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
   markIdentifierVerified(userId: string, channel: "email" | "phone", now: Date): Promise<AuthUserRecord>;
@@ -127,6 +128,13 @@ export class PrismaAuthRepository implements AuthRepository {
     return user ? mapUser(user) : null;
   }
 
+  async findSession(sessionId: string, userId: string): Promise<SessionRecord | null> {
+    const session = await this.database.authSession.findFirst({
+      where: { id: sessionId, userId },
+    });
+    return session ? mapSession(session) : null;
+  }
+
   async createUser(input: CreateUserInput): Promise<AuthUserRecord> {
     const user = await this.database.user.create({
       data: {
@@ -191,7 +199,6 @@ export class PrismaAuthRepository implements AuthRepository {
         });
         return { kind: "expired" } as const;
       }
-
       const next = await transaction.authSession.create({
         data: { userId: current.userId, tokenHash: nextTokenHash, expiresAt: nextExpiresAt },
       });
@@ -291,13 +298,7 @@ export class PrismaAuthRepository implements AuthRepository {
   ): Promise<AuthUserRecord> {
     return this.database.$transaction(async (transaction) => {
       const user = await transaction.user.create({
-        data: {
-          email,
-          normalizedEmail,
-          emailVerifiedAt: now,
-          status: "ACTIVE",
-          platformRole: "USER",
-        },
+        data: { email, normalizedEmail, emailVerifiedAt: now, status: "ACTIVE", platformRole: "USER" },
       });
       await transaction.authIdentity.create({
         data: { userId: user.id, provider: "GOOGLE", providerSubject, providerEmail: email },

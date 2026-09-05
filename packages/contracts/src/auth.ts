@@ -1,6 +1,11 @@
 import { Type, type Static } from "typebox";
 import { IsoTimestampSchema, UuidSchema } from "./common.js";
 
+const EmailSchema = Type.String({
+  pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+  maxLength: 320,
+});
+
 export const PlatformRoleSchema = Type.Union([
   Type.Literal("USER"),
   Type.Literal("ADMIN"),
@@ -19,7 +24,7 @@ export type UserStatusDto = Static<typeof UserStatusSchema>;
 export const AuthUserSchema = Type.Object(
   {
     id: UuidSchema,
-    email: Type.Union([Type.String({ format: "email" }), Type.Null()]),
+    email: Type.Union([EmailSchema, Type.Null()]),
     phone: Type.Union([Type.String({ minLength: 7, maxLength: 24 }), Type.Null()]),
     emailVerified: Type.Boolean(),
     phoneVerified: Type.Boolean(),
@@ -54,7 +59,7 @@ export type AuthSessionResponseDto = Static<typeof AuthSessionResponseSchema>;
 
 export const RegisterBodySchema = Type.Object(
   {
-    email: Type.Optional(Type.String({ format: "email", maxLength: 320 })),
+    email: Type.Optional(EmailSchema),
     phone: Type.Optional(Type.String({ minLength: 7, maxLength: 24 })),
     password: Type.String({ minLength: 12, maxLength: 128 }),
   },
