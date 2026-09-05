@@ -37,6 +37,22 @@ export interface R2MediaStorageOptions {
   readonly uploadTtlSeconds?: number;
 }
 
+function bytesEqual(bytes: Uint8Array, expected: readonly number[], offset = 0): boolean {
+  if (bytes.length < offset + expected.length) return false;
+  return expected.every((value, index) => bytes[offset + index] === value);
+}
+
+function matchesDeclaredImageType(bytes: Uint8Array, contentType: string | undefined): boolean {
+  if (contentType === "image/jpeg") return bytesEqual(bytes, [0xff, 0xd8, 0xff]);
+  if (contentType === "image/png") {
+    return bytesEqual(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  }
+  if (contentType === "image/webp") {
+    return bytesEqual(bytes, [0x52, 0x49, 0x46, 0x46]) && bytesEqual(bytes, [0x57, 0x45, 0x42, 0x50], 8);
+  }
+  return false;
+}
+
 export class R2MediaStorage implements MediaStorage {
   readonly bucket: string;
   private readonly client: S3Client;
@@ -83,9 +99,16 @@ export class R2MediaStorage implements MediaStorage {
       const result = await this.client.send(
         new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
       );
+      const prefix = await this.readObjectPrefix(objectKey, 16);
+      const declaredType = result.ContentType;
       return {
         sizeBytes: Number(result.ContentLength ?? 0),
-        contentType: result.ContentType,
+        // A browser-controlled Content-Type header is not sufficient evidence that
+        // the stored bytes are an allowed image. Returning an octet-stream marker
+        // causes the catalog completion boundary to reject mismatched signatures.
+        contentType: matchesDeclaredImageType(prefix, declaredType)
+          ? declaredType
+          : "application/octet-stream",
       };
     } catch (error) {
       const status =
