@@ -1,9 +1,9 @@
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import {
-  AcceptedResponseSchema,
   ApiErrorSchema,
   CreateShipmentBodySchema,
   FulfillmentProfileBodySchema,
+  FulfillmentProfileSchema,
   LogisticsStationListResponseSchema,
   OrderIdParamsSchema,
   ShipmentIdParamsSchema,
@@ -15,6 +15,7 @@ import {
   UpdateShipmentStatusBodySchema,
   VariantShippingParamsSchema,
   VariantShippingProfileBodySchema,
+  VariantShippingProfileSchema,
   VendorOrderShipmentParamsSchema,
 } from "@repo/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -66,25 +67,41 @@ const errors = { 400: ApiErrorSchema, 401: ApiErrorSchema, 403: ApiErrorSchema, 
 export function registerLogisticsRoutes(app: FastifyInstance, options: LogisticsRoutesOptions): void {
   const server = app.withTypeProvider<TypeBoxTypeProvider>();
 
+  server.get("/api/v1/stores/:storeId/fulfillment-profile", {
+    schema: { tags: ["logistics"], operationId: "getStoreFulfillmentProfile", params: StoreFulfillmentParamsSchema, response: { 200: FulfillmentProfileSchema, ...errors } },
+  }, async (request, reply) => {
+    try {
+      const principal = await requireAccessPrincipal(request, authOrThrow(options.authService));
+      return reply.send(await serviceOrThrow(options.service).getStoreProfile(principal, request.params.storeId));
+    } catch (error) { return sendError(request, reply, error); }
+  });
+
   server.put("/api/v1/stores/:storeId/fulfillment-profile", {
-    schema: { tags: ["logistics"], operationId: "updateStoreFulfillmentProfile", params: StoreFulfillmentParamsSchema, body: FulfillmentProfileBodySchema, response: { 202: AcceptedResponseSchema, ...errors } },
+    schema: { tags: ["logistics"], operationId: "updateStoreFulfillmentProfile", params: StoreFulfillmentParamsSchema, body: FulfillmentProfileBodySchema, response: { 200: FulfillmentProfileSchema, ...errors } },
   }, async (request, reply) => {
     try {
       requireCsrfToken(request);
       const principal = await requireAccessPrincipal(request, authOrThrow(options.authService));
-      await serviceOrThrow(options.service).updateStoreProfile(principal, request.params.storeId, request.body);
-      return reply.code(202).send({ accepted: true });
+      return reply.send(await serviceOrThrow(options.service).updateStoreProfile(principal, request.params.storeId, request.body));
+    } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.get("/api/v1/variants/:variantId/shipping-profile", {
+    schema: { tags: ["logistics"], operationId: "getVariantShippingProfile", params: VariantShippingParamsSchema, response: { 200: VariantShippingProfileSchema, ...errors } },
+  }, async (request, reply) => {
+    try {
+      const principal = await requireAccessPrincipal(request, authOrThrow(options.authService));
+      return reply.send(await serviceOrThrow(options.service).getVariantProfile(principal, request.params.variantId));
     } catch (error) { return sendError(request, reply, error); }
   });
 
   server.put("/api/v1/variants/:variantId/shipping-profile", {
-    schema: { tags: ["logistics"], operationId: "updateVariantShippingProfile", params: VariantShippingParamsSchema, body: VariantShippingProfileBodySchema, response: { 202: AcceptedResponseSchema, ...errors } },
+    schema: { tags: ["logistics"], operationId: "updateVariantShippingProfile", params: VariantShippingParamsSchema, body: VariantShippingProfileBodySchema, response: { 200: VariantShippingProfileSchema, ...errors } },
   }, async (request, reply) => {
     try {
       requireCsrfToken(request);
       const principal = await requireAccessPrincipal(request, authOrThrow(options.authService));
-      await serviceOrThrow(options.service).updateVariantProfile(principal, request.params.variantId, request.body);
-      return reply.code(202).send({ accepted: true });
+      return reply.send(await serviceOrThrow(options.service).updateVariantProfile(principal, request.params.variantId, request.body));
     } catch (error) { return sendError(request, reply, error); }
   });
 
