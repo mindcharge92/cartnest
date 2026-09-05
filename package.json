@@ -24,9 +24,9 @@
     "db:format": "pnpm --filter @repo/database db:format",
     "db:validate": "pnpm --filter @repo/database db:validate",
     "db:migrate:dev": "pnpm --filter @repo/database db:migrate:dev",
-    "openapi:generate": "pnpm --filter @cartnest/api openapi:generate",
+    "openapi:generate": "pnpm --filter @repo/contracts build && pnpm --filter @repo/database build && pnpm --filter @cartnest/api openapi:generate",
     "api-client:generate": "pnpm openapi:generate && pnpm --filter @repo/api-client generate",
-    "api:generate": "pnpm openapi:generate && pnpm --filter @repo/api-client generate"
+    "api:generate": "pnpm api-client:generate"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
