@@ -104,6 +104,52 @@ CREATE UNIQUE INDEX "ProviderEvent_provider_fingerprint_fallback_unique"
   ON "ProviderEvent" ("provider", "fingerprint")
   WHERE "externalEventId" IS NULL AND "fingerprint" IS NOT NULL;
 
+-- P8 logistics constraints. The P8 extension models intentionally keep scalar
+-- ownership IDs so the multi-file schema does not introduce reverse relations
+-- into earlier domain files; these foreign keys restore relational integrity.
+ALTER TABLE "StoreFulfillmentProfile"
+  ADD CONSTRAINT "StoreFulfillmentProfile_store_fk"
+    FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "StoreFulfillmentProfile_manual_fee_nonnegative"
+    CHECK ("manualDeliveryFeeAmountMinor" IS NULL OR "manualDeliveryFeeAmountMinor" >= 0),
+  ADD CONSTRAINT "StoreFulfillmentProfile_gigl_station_required"
+    CHECK ("defaultProvider" <> 'GIGL' OR "giglStationId" IS NOT NULL);
+
+ALTER TABLE "VariantShippingProfile"
+  ADD CONSTRAINT "VariantShippingProfile_variant_fk"
+    FOREIGN KEY ("variantId") REFERENCES "ProductVariant"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "VariantShippingProfile_weight_positive" CHECK ("weightGrams" > 0),
+  ADD CONSTRAINT "VariantShippingProfile_pieces_positive" CHECK ("pieces" > 0),
+  ADD CONSTRAINT "VariantShippingProfile_dimensions_positive"
+    CHECK (
+      ("lengthMm" IS NULL OR "lengthMm" > 0)
+      AND ("widthMm" IS NULL OR "widthMm" > 0)
+      AND ("heightMm" IS NULL OR "heightMm" > 0)
+    );
+
+ALTER TABLE "ShippingQuote"
+  ADD CONSTRAINT "ShippingQuote_user_fk"
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "ShippingQuote_cart_fk"
+    FOREIGN KEY ("cartId") REFERENCES "Cart"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "ShippingQuote_store_fk"
+    FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "ShippingQuote_amount_nonnegative" CHECK ("amountMinor" >= 0),
+  ADD CONSTRAINT "ShippingQuote_expiry_after_create" CHECK ("expiresAt" > "createdAt");
+
+ALTER TABLE "Shipment"
+  ADD CONSTRAINT "Shipment_fee_nonnegative"
+    CHECK ("feeAmountMinor" IS NULL OR "feeAmountMinor" >= 0),
+  ADD CONSTRAINT "Shipment_delivered_timestamp_consistency"
+    CHECK ("status" <> 'DELIVERED' OR "deliveredAt" IS NOT NULL);
+
+ALTER TABLE "ShipmentItem"
+  ADD CONSTRAINT "ShipmentItem_shipment_fk"
+    FOREIGN KEY ("shipmentId") REFERENCES "Shipment"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "ShipmentItem_order_item_fk"
+    FOREIGN KEY ("orderItemId") REFERENCES "OrderItem"("id") ON DELETE RESTRICT,
+  ADD CONSTRAINT "ShipmentItem_quantity_positive" CHECK ("quantity" > 0);
+
 ALTER TABLE "ReturnItem"
   ADD CONSTRAINT "ReturnItem_quantity_positive" CHECK ("quantity" > 0);
 
