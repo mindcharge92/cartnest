@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import type {
   CreateShipmentBodyDto,
   FulfillmentProfileBodyDto,
+  FulfillmentProfileDto,
   LogisticsStationListResponseDto,
   ShipmentDto,
   ShippingQuoteRequestDto,
   ShippingQuoteResponseDto,
   VariantShippingProfileBodyDto,
+  VariantShippingProfileDto,
 } from "@repo/contracts";
 import type { AccessPrincipal } from "../auth/auth.public.js";
 import type { CartService } from "../cart/cart.service.js";
@@ -63,6 +65,10 @@ function mapShipment(record: ShipmentRecord): ShipmentDto {
       record.feeAmountMinor !== null && record.currency
         ? { amountMinor: record.feeAmountMinor.toString(), currency: record.currency }
         : null,
+    items: record.items.map((item) => ({
+      orderItemId: item.orderItemId,
+      quantity: item.quantity,
+    })),
     deliveredAt: record.deliveredAt?.toISOString() ?? null,
     events: record.events.map((event) => ({
       id: event.id,
@@ -74,6 +80,49 @@ function mapShipment(record: ShipmentRecord): ShipmentDto {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
+}
+
+type FulfillmentProfileRecord = NonNullable<
+  Awaited<ReturnType<PrismaLogisticsRepository["findFulfillmentProfile"]>>
+>;
+type VariantProfileRecord = NonNullable<
+  Awaited<ReturnType<PrismaLogisticsRepository["findVariantShippingProfile"]>>
+>;
+
+function mapFulfillmentProfile(record: FulfillmentProfileRecord): FulfillmentProfileDto {
+  return {
+    id: record.id,
+    storeId: record.storeId,
+    defaultProvider: record.defaultProvider,
+    manualDeliveryEnabled: record.manualDeliveryEnabled,
+    manualDeliveryFee:
+      record.manualDeliveryFeeAmountMinor === null
+        ? null
+        : { amountMinor: record.manualDeliveryFeeAmountMinor.toString(), currency: record.currency },
+    originAddress: record.originAddress as FulfillmentProfileDto["originAddress"],
+    giglStationId: record.giglStationId,
+    active: record.active,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapVariantProfile(record: VariantProfileRecord): VariantShippingProfileDto {
+  return {
+    id: record.id,
+    variantId: record.variantId,
+    weightGrams: record.weightGrams,
+    lengthMm: record.lengthMm,
+    widthMm: record.widthMm,
+    heightMm: record.heightMm,
+    pieces: record.pieces,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function repositorySignal(error: unknown, signal: string): boolean {
+  return error instanceof Error && error.message.includes(signal);
 }
 
 export class LogisticsService {
@@ -115,11 +164,24 @@ export class LogisticsService {
     }
   }
 
+  async getStoreProfile(principal: AccessPrincipal, storeId: string): Promise<FulfillmentProfileDto> {
+    await this.vendorBoundary.requireStorePermission(principal, storeId, "store:read");
+    const profile = await this.repository.findFulfillmentProfile(storeId);
+    if (!profile) {
+      throw new LogisticsError(
+        "FULFILLMENT_PROFILE_NOT_FOUND",
+        "This store does not have a fulfillment profile yet.",
+        404,
+      );
+    }
+    return mapFulfillmentProfile(profile);
+  }
+
   async updateStoreProfile(
     principal: AccessPrincipal,
     storeId: string,
     body: FulfillmentProfileBodyDto,
-  ) {
+  ): Promise<FulfillmentProfileDto> {
     await this.vendorBoundary.requireStorePermission(principal, storeId, "store:update");
     if (body.defaultProvider === "GIGL" && !body.giglStationId) {
       throw new LogisticsError(
@@ -135,18 +197,43 @@ export class LogisticsService {
         400,
       );
     }
-    return this.repository.upsertFulfillmentProfile(storeId, body);
+    if (body.manualDeliveryEnabled && body.manualDeliveryFeeAmountMinor === undefined) {
+      throw new LogisticsError(
+        "MANUAL_DELIVERY_FEE_REQUIRED",
+        "A manual delivery fee is required while manual delivery is enabled.",
+        400,
+      );
+    }
+    return mapFulfillmentProfile(await this.repository.upsertFulfillmentProfile(storeId, body));
+  }
+
+  async getVariantProfile(
+    principal: AccessPrincipal,
+    variantId: string,
+  ): Promise<VariantShippingProfileDto> {
+    const variant = await this.catalogBoundary.findVariantContext(variantId);
+    if (!variant) throw new LogisticsError("VARIANT_NOT_FOUND", "Variant was not found.", 404);
+    await this.vendorBoundary.requireStorePermission(principal, variant.storeId, "product:read");
+    const profile = await this.repository.findVariantShippingProfile(variantId);
+    if (!profile) {
+      throw new LogisticsError(
+        "VARIANT_SHIPPING_PROFILE_NOT_FOUND",
+        "This variant does not have a shipping profile yet.",
+        404,
+      );
+    }
+    return mapVariantProfile(profile);
   }
 
   async updateVariantProfile(
     principal: AccessPrincipal,
     variantId: string,
     body: VariantShippingProfileBodyDto,
-  ) {
+  ): Promise<VariantShippingProfileDto> {
     const variant = await this.catalogBoundary.findVariantContext(variantId);
     if (!variant) throw new LogisticsError("VARIANT_NOT_FOUND", "Variant was not found.", 404);
     await this.vendorBoundary.requireStorePermission(principal, variant.storeId, "product:update");
-    return this.repository.upsertVariantShippingProfile(variantId, body);
+    return mapVariantProfile(await this.repository.upsertVariantShippingProfile(variantId, body));
   }
 
   async quoteCart(
@@ -327,6 +414,14 @@ export class LogisticsService {
       );
     }
 
+    if (new Set(body.items.map((item) => item.orderItemId)).size !== body.items.length) {
+      throw new LogisticsError(
+        "SHIPMENT_ITEM_DUPLICATE",
+        "Each order item may appear only once in a shipment request.",
+        400,
+      );
+    }
+
     const allocated = await this.allocationStore.allocatedQuantities(vendorOrderId);
     const orderItems = new Map(context.items.map((item) => [item.id, item]));
     for (const requested of body.items) {
@@ -355,16 +450,44 @@ export class LogisticsService {
       );
     }
 
-    const shipment = await this.repository.createShipment({
-      vendorOrderId,
-      provider: "MANUAL",
-      ...(body.trackingNumber ? { trackingNumber: body.trackingNumber } : {}),
-      ...(body.note ? { metadata: { note: body.note } : {}),
-      items: body.items,
-      actorUserId: principal.userId,
-      now: new Date(),
-    });
-    return mapShipment(shipment);
+    try {
+      const shipment = await this.repository.createShipment({
+        vendorOrderId,
+        provider: "MANUAL",
+        ...(body.trackingNumber ? { trackingNumber: body.trackingNumber } : {}),
+        ...(body.note ? { metadata: { note: body.note } } : {}),
+        items: body.items,
+        actorUserId: principal.userId,
+        now: new Date(),
+      });
+      return mapShipment(shipment);
+    } catch (error) {
+      if (repositorySignal(error, "SHIPMENT_ITEM_DUPLICATE")) {
+        throw new LogisticsError(
+          "SHIPMENT_ITEM_DUPLICATE",
+          "Each order item may appear only once in a shipment request.",
+          400,
+        );
+      }
+      if (repositorySignal(error, "ORDER_ITEM_NOT_FOUND")) {
+        throw new LogisticsError(
+          "ORDER_ITEM_NOT_FOUND",
+          "A requested shipment item does not belong to this vendor order.",
+          400,
+        );
+      }
+      if (repositorySignal(error, "SHIPMENT_QUANTITY_EXCEEDED")) {
+        throw new LogisticsError(
+          "SHIPMENT_QUANTITY_EXCEEDED",
+          "Shipment quantity exceeds the remaining unallocated order quantity.",
+          409,
+        );
+      }
+      if (repositorySignal(error, "VENDOR_ORDER_NOT_FOUND")) {
+        throw new LogisticsError("VENDOR_ORDER_NOT_FOUND", "Vendor order was not found.", 404);
+      }
+      throw error;
+    }
   }
 
   async listShipments(
