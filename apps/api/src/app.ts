@@ -13,6 +13,8 @@ import {
 import type { DatabaseClient } from "@repo/database";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import rawBodyPlugin from "fastify-raw-body";
+import { registerAdminRoutes } from "./modules/admin/admin.routes.js";
+import { AdminService } from "./modules/admin/admin.service.js";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
@@ -37,6 +39,8 @@ import {
   LogisticsAwareCheckoutFinancialPolicy,
   LogisticsService,
 } from "./modules/logistics/logistics.service.js";
+import { registerNotificationRoutes } from "./modules/notifications/notification.routes.js";
+import { NotificationService } from "./modules/notifications/notification.service.js";
 import { DatabaseOrderFulfillmentBoundary } from "./modules/orders/order.fulfillment.js";
 import { P6PrePaymentVendorAcceptancePolicy } from "./modules/orders/order.policy.js";
 import { PrismaOrderRepository } from "./modules/orders/order.repository.js";
@@ -130,6 +134,8 @@ export function buildApp(
         { name: "returns", description: "RMA requests, return state, and returned-stock policy" },
         { name: "refunds", description: "Partial/full refund requests, provider execution, and reconciliation" },
         { name: "reviews", description: "Verified-purchase product/store reviews and moderation" },
+        { name: "analytics", description: "Vendor and platform operational analytics" },
+        { name: "notifications", description: "In-app notifications, preferences, and provider-neutral delivery queue" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -222,18 +228,22 @@ export function buildApp(
       ? new BuyerLogisticsQueryService(logisticsRepository, orderFulfillmentBoundary)
       : undefined;
 
-  // P8 replaces the zero-delivery checkout seam with persisted, expiring
-  // per-store shipping quotes. Tax and promotions remain P10 seams, so
-  // production checkout stays disabled until those policies are configured.
+  // P10 closes the prior tax/promotion placeholders. Production checkout now
+  // exists, but fails closed when no active platform commission default or tax
+  // rate can be resolved. Development/test may use zero-value fallbacks.
   const baseFinancialPolicy = database
-    ? new DatabaseCheckoutFinancialPolicy(database, true)
+    ? new DatabaseCheckoutFinancialPolicy(
+        database,
+        environment.nodeEnv !== "production",
+        environment.nodeEnv === "production",
+      )
     : undefined;
   const checkoutFinancialPolicy =
     baseFinancialPolicy && logisticsService
       ? new LogisticsAwareCheckoutFinancialPolicy(baseFinancialPolicy, logisticsService)
       : undefined;
   const orderService =
-    orderRepository && vendorBoundary && checkoutFinancialPolicy && environment.nodeEnv !== "production"
+    orderRepository && vendorBoundary && checkoutFinancialPolicy
       ? new OrderService(
           orderRepository,
           vendorBoundary,
@@ -271,6 +281,8 @@ export function buildApp(
           paymentAdapters,
         )
       : undefined;
+  const adminService = database && vendorBoundary ? new AdminService(database, vendorBoundary) : undefined;
+  const notificationService = database ? new NotificationService(database) : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
@@ -286,6 +298,8 @@ export function buildApp(
     authService,
   });
   registerReturnsRoutes(app, { service: returnsService, authService });
+  registerAdminRoutes(app, { service: adminService, authService });
+  registerNotificationRoutes(app, { service: notificationService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
