@@ -1,5 +1,11 @@
 import type { DeliveryAddressSnapshotDto, ShipmentProviderDto, ShipmentStatusDto } from "@repo/contracts";
 
+export interface LogisticsStation {
+  readonly id: number;
+  readonly name: string;
+  readonly state: string | null;
+}
+
 export interface LogisticsQuoteItem {
   readonly variantId: string;
   readonly productName: string;
@@ -59,6 +65,7 @@ export interface LogisticsProviderAdapter {
   quote(input: LogisticsQuoteInput): Promise<LogisticsQuoteResult>;
   createShipment(input: LogisticsCreateShipmentInput): Promise<LogisticsCreateShipmentResult>;
   trackShipment(reference: string): Promise<LogisticsTrackingResult>;
+  getStations?(): Promise<readonly LogisticsStation[]>;
 }
 
 function addressText(address: DeliveryAddressSnapshotDto): string {
@@ -84,7 +91,7 @@ function firstString(value: unknown, keys: readonly string[]): string | undefine
   return undefined;
 }
 
-function giglStatus(code: string | undefined): ShipmentStatusDto {
+export function mapGiglScanCode(code: string | undefined): ShipmentStatusDto {
   const value = (code ?? "").toUpperCase();
   if (["SHD", "OKC"].includes(value)) return "DELIVERED";
   if (["OFDU", "WC"].includes(value)) return "OUT_FOR_DELIVERY";
@@ -120,6 +127,20 @@ export class GiglAdapter implements LogisticsProviderAdapter {
     const responseBody = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`GIGL_HTTP_${response.status}`);
     return responseBody;
+  }
+
+  async getStations(): Promise<readonly LogisticsStation[]> {
+    const response = await this.request("localstations/get");
+    const data = response && typeof response === "object" && "Object" in response
+      ? (response as { Object?: unknown }).Object
+      : response;
+    if (!Array.isArray(data)) throw new Error("GIGL_STATIONS_UNMAPPABLE");
+    return data.flatMap((entry): LogisticsStation[] => {
+      const id = firstNumber(entry, ["StationId", "ServiceCentreId", "Id"]);
+      const name = firstString(entry, ["StationName", "ServiceCentreName", "Name"]);
+      if (id === null || !Number.isInteger(id) || id < 1 || !name) return [];
+      return [{ id, name, state: firstString(entry, ["StateName", "State"]) ?? null }];
+    });
   }
 
   async quote(input: LogisticsQuoteInput): Promise<LogisticsQuoteResult> {
@@ -168,7 +189,7 @@ export class GiglAdapter implements LogisticsProviderAdapter {
     const latest = Array.isArray(data) ? data.at(-1) : data;
     const code = firstString(latest, ["ScanCode", "Code", "StatusCode"]);
     return {
-      status: giglStatus(code),
+      status: mapGiglScanCode(code),
       message: firstString(latest, ["Reason", "Comment", "Status", "Description"]),
       location: firstString(latest, ["Location", "ServiceCentre", "StationName"]),
       eventTime: new Date(firstString(latest, ["ScanDate", "DateCreated", "DateTime"]) ?? Date.now()),
