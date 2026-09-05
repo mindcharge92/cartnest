@@ -1,0 +1,264 @@
+.commercePage {
+  width: min(var(--content), calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 5rem) 0;
+}
+
+.commerceHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.commerceHeaderCopy { max-width: 48rem; }
+
+.commerceLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  gap: 1rem;
+  align-items: start;
+}
+
+.commerceStack,
+.storeGroupList,
+.wishlistGrid,
+.inventoryStack {
+  display: grid;
+  gap: 1rem;
+}
+
+.storeGroup {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.storeGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.storeGroupHeader h2,
+.commerceSummary h2,
+.inventoryHeader h2,
+.inventoryHistory h3 {
+  margin: 0;
+}
+
+.storeGroupHeader span,
+.commerceMeta,
+.inventoryMeta {
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.cartLine {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.cartLine:last-child { border-bottom: 0; }
+
+.cartLineImage,
+.wishlistImage {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  aspect-ratio: 1;
+}
+
+.cartLineImage img,
+.wishlistImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.commerceImageFallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  font-weight: 900;
+}
+
+.cartLineBody { min-width: 0; }
+.cartLineBody h3,
+.wishlistBody h2 { margin: 0 0 0.3rem; font-size: 1rem; }
+.cartLineBody h3 a,
+.wishlistBody h2 a { text-decoration: none; }
+.cartLineBody h3 a:hover,
+.wishlistBody h2 a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
+
+.variantLabel {
+  margin: 0.25rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.cartLineActions {
+  display: grid;
+  justify-items: end;
+  gap: 0.55rem;
+  min-width: 8rem;
+}
+
+.quantityEditor {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.quantityEditor input {
+  width: 5rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.compactButton {
+  min-height: 2.45rem !important;
+  padding: 0.45rem 0.7rem !important;
+}
+
+.textDangerButton {
+  border: 0;
+  padding: 0.25rem 0;
+  background: transparent;
+  color: var(--danger);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.commerceSummary {
+  position: sticky;
+  top: 5.4rem;
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 1.2rem;
+  box-shadow: 0 10px 35px rgba(20, 42, 27, 0.05);
+}
+
+.summaryRows { display: grid; gap: 0.75rem; }
+.summaryRow { display: flex; justify-content: space-between; gap: 1rem; color: var(--text-soft); }
+.summaryRow strong { color: var(--text); }
+.summaryTotal { padding-top: 0.8rem; border-top: 1px solid var(--line); font-size: 1.05rem; }
+
+.checkoutReadiness {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+.checkoutReadinessReady { background: var(--brand-soft); color: var(--brand-dark); }
+.checkoutReadinessBlocked { background: var(--danger-soft); color: #8b1e16; }
+.checkoutReadiness strong { font-size: 0.9rem; }
+.checkoutReadiness p { margin: 0; font-size: 0.84rem; line-height: 1.5; }
+
+.issueList {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #8b1e16;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.unavailableSection {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid #efc5c1;
+  border-radius: var(--radius-lg);
+  background: var(--danger-soft);
+  padding: 1rem;
+}
+.unavailableSection h2 { margin: 0; font-size: 1rem; }
+.unavailableCard {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid rgba(180, 35, 24, 0.16);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.7);
+}
+.unavailableCard p { margin: 0.2rem 0 0; color: #7f3129; font-size: 0.85rem; line-height: 1.45; }
+
+.wishlistGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wishlistCard {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.wishlistImage { border-radius: 0; aspect-ratio: 4 / 3; }
+.wishlistBody { display: grid; gap: 0.75rem; padding: 1rem; }
+.wishlistFooter { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; flex-wrap: wrap; }
+.wishlistActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.productCommerceActions {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.productCommerceControls { display: flex; gap: 0.65rem; align-items: end; flex-wrap: wrap; }
+.productQuantity { width: 6.2rem; }
+.productQuantity input { min-height: 2.8rem; }
+
+.inventoryStoreSelector { max-width: 32rem; }
+.inventoryTableWrap { overflow-x: auto; }
+.inventoryTable { width: 100%; border-collapse: collapse; min-width: 58rem; }
+.inventoryTable th,
+.inventoryTable td { padding: 0.8rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.inventoryTable th { color: var(--text-soft); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.inventoryNumbers { display: grid; grid-template-columns: repeat(3, auto); gap: 0.7rem; }
+.inventoryNumbers span { display: grid; gap: 0.1rem; }
+.inventoryNumbers small { color: var(--text-soft); }
+.inventoryAdjustmentForm { display: grid; grid-template-columns: 7rem minmax(12rem, 1fr) auto; gap: 0.5rem; align-items: end; }
+.inventoryAdjustmentForm input { min-height: 2.45rem; }
+.inventoryHistory { padding: 0.9rem; background: var(--surface-muted); border-radius: var(--radius-md); }
+.inventoryHistoryList { display: grid; gap: 0.45rem; margin-top: 0.65rem; }
+.inventoryHistoryItem { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; gap: 0.7rem; align-items: start; padding: 0.55rem 0; border-top: 1px solid var(--line); font-size: 0.85rem; }
+.inventoryHistoryItem:first-child { border-top: 0; }
+.inventoryDeltaPositive { color: var(--brand-dark); font-weight: 800; }
+.inventoryDeltaNegative { color: var(--danger); font-weight: 800; }
+.inventoryConflict { color: var(--warning); }
+
+@media (max-width: 920px) {
+  .commerceLayout { grid-template-columns: 1fr; }
+  .commerceSummary { position: static; }
+  .wishlistGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .commercePage { width: min(100% - 1.25rem, var(--content)); }
+  .commerceHeader { align-items: start; flex-direction: column; }
+  .cartLine { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .cartLineActions { grid-column: 1 / -1; justify-items: stretch; }
+  .quantityEditor { justify-content: space-between; }
+  .wishlistGrid { grid-template-columns: 1fr; }
+  .unavailableCard { align-items: flex-start; flex-direction: column; }
+  .productCommerceControls { align-items: stretch; }
+  .productQuantity { width: 100%; }
+  .inventoryAdjustmentForm { grid-template-columns: 1fr; }
+}
