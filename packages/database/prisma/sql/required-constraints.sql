@@ -94,6 +94,16 @@ ALTER TABLE "OrderItem"
 ALTER TABLE "PaymentIntent"
   ADD CONSTRAINT "PaymentIntent_amount_nonnegative" CHECK ("amountMinor" >= 0);
 
+ALTER TABLE "PaymentAttempt"
+  ADD CONSTRAINT "PaymentAttempt_amount_nonnegative" CHECK ("amountMinor" >= 0);
+
+ALTER TABLE "PaymentAllocation"
+  ADD CONSTRAINT "PaymentAllocation_amount_nonnegative" CHECK ("amountMinor" >= 0);
+
+CREATE UNIQUE INDEX "ProviderEvent_provider_fingerprint_fallback_unique"
+  ON "ProviderEvent" ("provider", "fingerprint")
+  WHERE "externalEventId" IS NULL AND "fingerprint" IS NOT NULL;
+
 ALTER TABLE "ReturnItem"
   ADD CONSTRAINT "ReturnItem_quantity_positive" CHECK ("quantity" > 0);
 
