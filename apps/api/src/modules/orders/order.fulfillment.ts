@@ -21,6 +21,8 @@ export interface VendorOrderFulfillmentContext {
 
 export interface OrderFulfillmentBoundary {
   getVendorOrderContext(vendorOrderId: string): Promise<VendorOrderFulfillmentContext | null>;
+  listUserOrderVendorOrderIds(userId: string, orderId: string): Promise<readonly string[] | null>;
+  userOwnsVendorOrder(userId: string, vendorOrderId: string): Promise<boolean>;
   applyShipmentAggregate(vendorOrderId: string, statuses: readonly ShipmentStatusDto[], now: Date): Promise<void>;
 }
 
@@ -43,6 +45,21 @@ export class DatabaseOrderFulfillmentBoundary implements OrderFulfillmentBoundar
       deliveryAddress: row.order.deliveryAddressSnapshot as unknown as DeliveryAddressSnapshotDto,
       items: row.items.map((item) => ({ id: item.id, variantId: item.variantId, productName: item.productNameSnapshot, quantity: item.quantity })),
     };
+  }
+
+  async listUserOrderVendorOrderIds(userId: string, orderId: string): Promise<readonly string[] | null> {
+    const order = await this.database.order.findFirst({
+      where: { id: orderId, userId },
+      select: { vendorOrders: { select: { id: true } } },
+    });
+    return order ? order.vendorOrders.map((row) => row.id) : null;
+  }
+
+  async userOwnsVendorOrder(userId: string, vendorOrderId: string): Promise<boolean> {
+    return Boolean(await this.database.vendorOrder.findFirst({
+      where: { id: vendorOrderId, order: { userId } },
+      select: { id: true },
+    }));
   }
 
   async applyShipmentAggregate(vendorOrderId: string, statuses: readonly ShipmentStatusDto[], now: Date): Promise<void> {
