@@ -60,7 +60,7 @@ export function createContractRequestClient(options: ContractRequestClientOption
       const response = await fetchImpl(`${baseUrl}${normalizedPath}`, {
         ...rest,
         headers,
-        body: encodedBody,
+        ...(encodedBody !== undefined ? { body: encodedBody } : {}),
         credentials: rest.credentials ?? "include",
       });
 
