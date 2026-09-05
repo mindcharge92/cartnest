@@ -187,6 +187,18 @@ function policyError(error: unknown): never {
   }
 }
 
+function databaseSignal(error: unknown, signal: string): boolean {
+  return error instanceof Error && error.message.includes(signal);
+}
+
+function activePaymentCancellationError(): OrderError {
+  return new OrderError(
+    "ORDER_PAYMENT_ACTIVE",
+    "A payment attempt is active or unresolved. Reconcile the payment before cancelling this order.",
+    409,
+  );
+}
+
 export class OrderService {
   constructor(
     private readonly repository: OrderRepository,
@@ -268,6 +280,7 @@ export class OrderService {
       if (!order) throw new OrderError("ORDER_NOT_FOUND", "Order was not found.", 404);
       return mapOrder(order);
     } catch (error) {
+      if (databaseSignal(error, "ORDER_PAYMENT_ACTIVE")) throw activePaymentCancellationError();
       if (error instanceof Error && error.message === "ORDER_NOT_CANCELLABLE") throw new OrderError("ORDER_NOT_CANCELLABLE", "Only an unpaid order with a pending payment can be cancelled directly.", 409);
       throw error;
     }
@@ -297,6 +310,7 @@ export class OrderService {
       if (!changed) throw new OrderError("VENDOR_ORDER_NOT_FOUND", "Vendor order was not found.", 404);
       return mapVendorOrder(changed);
     } catch (error) {
+      if (databaseSignal(error, "ORDER_PAYMENT_ACTIVE")) throw activePaymentCancellationError();
       if (error instanceof Error && error.message === "VENDOR_ORDER_NOT_CANCELLABLE") throw new OrderError("VENDOR_ORDER_NOT_CANCELLABLE", "This vendor order cannot be cancelled in its current payment/fulfillment state.", 409);
       throw error;
     }
