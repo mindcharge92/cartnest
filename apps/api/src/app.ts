@@ -28,8 +28,8 @@ import { PrismaInventoryRepository } from "./modules/inventory/inventory.reposit
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { InventoryService } from "./modules/inventory/inventory.service.js";
 import {
-  DefaultVendorAcceptancePolicy,
   P6BaselineCheckoutFinancialPolicy,
+  P6PrePaymentVendorAcceptancePolicy,
 } from "./modules/orders/order.policy.js";
 import { PrismaOrderRepository } from "./modules/orders/order.repository.js";
 import { registerOrderRoutes } from "./modules/orders/order.routes.js";
@@ -168,7 +168,7 @@ export function buildApp(
           new PrismaOrderRepository(database),
           vendorBoundary,
           new P6BaselineCheckoutFinancialPolicy(),
-          new DefaultVendorAcceptancePolicy(),
+          new P6PrePaymentVendorAcceptancePolicy(),
         )
       : undefined;
 
