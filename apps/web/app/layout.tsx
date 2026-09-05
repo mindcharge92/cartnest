@@ -6,6 +6,7 @@ import "./globals.css";
 import "./vendor.css";
 import "./catalog.css";
 import "./commerce.css";
+import "./navigation.css";
 
 export const metadata: Metadata = {
   title: {
