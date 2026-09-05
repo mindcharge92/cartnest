@@ -23,6 +23,11 @@ export interface ApiEnvironment {
   readonly googleClientSecret: string | undefined;
   readonly googleRedirectUri: string;
   readonly exposeDevelopmentAuthTokens: boolean;
+  readonly r2AccountId: string | undefined;
+  readonly r2AccessKeyId: string | undefined;
+  readonly r2SecretAccessKey: string | undefined;
+  readonly r2Bucket: string | undefined;
+  readonly r2PublicBaseUrl: string | undefined;
 }
 
 function requiredSecret(
@@ -75,5 +80,10 @@ export function getApiEnvironment(source: NodeJS.ProcessEnv = process.env): ApiE
     googleClientSecret: readString(source, "GOOGLE_CLIENT_SECRET"),
     googleRedirectUri,
     exposeDevelopmentAuthTokens: readBoolean(source, "AUTH_EXPOSE_DEVELOPMENT_TOKENS", false),
+    r2AccountId: readString(source, "R2_ACCOUNT_ID"),
+    r2AccessKeyId: readString(source, "R2_ACCESS_KEY_ID"),
+    r2SecretAccessKey: readString(source, "R2_SECRET_ACCESS_KEY"),
+    r2Bucket: readString(source, "R2_BUCKET"),
+    r2PublicBaseUrl: readUrl(source, "R2_PUBLIC_BASE_URL"),
   });
 }
