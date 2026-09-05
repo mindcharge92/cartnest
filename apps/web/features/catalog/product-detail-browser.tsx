@@ -8,10 +8,35 @@ import { apiErrorMessage, catalogApi } from "../../lib/api";
 import { formatMoney } from "./catalog-utils";
 
 function variantMatches(variant: ProductVariantDto, selected: Readonly<Record<string, string>>): boolean {
-  const selectedIds = Object.values(selected);
-  if (selectedIds.length === 0) return variant.optionValues.length === 0;
-  return variant.optionValues.length === selectedIds.length &&
+  const selectedEntries = Object.entries(selected).filter(([, value]) => Boolean(value));
+  if (selectedEntries.length === 0) return variant.optionValues.length === 0;
+  return variant.optionValues.length === selectedEntries.length &&
     variant.optionValues.every((selection) => selected[selection.optionId] === selection.valueId);
+}
+
+function initialSelection(product: CatalogProductDetailResponseDto): Record<string, string> {
+  const firstVariant = product.variants[0];
+  if (!firstVariant) return {};
+  return Object.fromEntries(firstVariant.optionValues.map((selection) => [selection.optionId, selection.valueId]));
+}
+
+function valueHasCompatibleVariant(
+  variants: readonly ProductVariantDto[],
+  optionId: string,
+  valueId: string,
+  selected: Readonly<Record<string, string>>,
+): boolean {
+  return variants.some((variant) => {
+    const hasTarget = variant.optionValues.some(
+      (selection) => selection.optionId === optionId && selection.valueId === valueId,
+    );
+    if (!hasTarget) return false;
+    return variant.optionValues.every((selection) => {
+      if (selection.optionId === optionId) return true;
+      const selectedValue = selected[selection.optionId];
+      return !selectedValue || selectedValue === selection.valueId;
+    });
+  });
 }
 
 export function ProductDetailBrowser({ productId }: Readonly<{ productId: string }>) {
@@ -27,7 +52,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
     try {
       const next = await catalogApi.getCatalogProduct(productId);
       setProduct(next);
-      setSelected(Object.fromEntries(next.options.map((option) => [option.id, option.values[0]?.id ?? ""])));
+      setSelected(initialSelection(next));
       setActiveImage(0);
       setState("ready");
     } catch (caught) {
@@ -42,7 +67,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
 
   const selectedVariant = useMemo(() => {
     if (!product) return null;
-    return product.variants.find((variant) => variantMatches(variant, selected)) ?? product.variants[0] ?? null;
+    return product.variants.find((variant) => variantMatches(variant, selected)) ?? null;
   }, [product, selected]);
 
   if (state === "loading") return <main className="pageShell"><LoadingState label="Loading product…" /></main>;
@@ -101,8 +126,11 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
                   <div className="optionValueRow">
                     {option.values.map((value) => {
                       const active = selected[option.id] === value.id;
-                      const hasCombination = product.variants.some((variant) =>
-                        variant.optionValues.some((selection) => selection.optionId === option.id && selection.valueId === value.id),
+                      const hasCombination = valueHasCompatibleVariant(
+                        product.variants,
+                        option.id,
+                        value.id,
+                        selected,
                       );
                       return (
                         <button
@@ -129,7 +157,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
               <div><span>Variant</span><strong>{selectedVariant.optionValues.length > 0 ? selectedVariant.optionValues.map((item) => item.value).join(" / ") : "Standard"}</strong></div>
             </div>
           ) : (
-            <p className="formMessage formMessageError">This option combination is not currently available.</p>
+            <p className="formMessage formMessageError" role="status">This option combination is not currently available. Choose another value.</p>
           )}
 
           <div className="productPhaseNotice">
