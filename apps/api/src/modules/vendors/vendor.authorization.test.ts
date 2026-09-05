@@ -37,9 +37,38 @@ describe("vendor authorization", () => {
     expect(() => requireVendorPermission(staff, "product:archive")).toThrow();
   });
 
-  it("allows staff only for explicitly granted permissions", () => {
+  it("does not grant unrelated mutation permissions", () => {
     expect(() => requireVendorPermission(staff, "store:read")).not.toThrow();
     expect(() => requireVendorPermission(staff, "inventory:adjust")).toThrow();
+  });
+
+  it("derives read access required to use granted scoped capabilities", () => {
+    const inventoryOperator: VendorMembershipContext = {
+      ...staff,
+      permissions: ["inventory:adjust"],
+    };
+    expect(effectiveVendorPermissions(inventoryOperator)).toEqual(
+      expect.arrayContaining(["store:read", "inventory:read", "inventory:adjust"]),
+    );
+    expect(() => requireVendorPermission(inventoryOperator, "store:read")).not.toThrow();
+    expect(() => requireVendorPermission(inventoryOperator, "inventory:read")).not.toThrow();
+
+    const fulfiller: VendorMembershipContext = {
+      ...staff,
+      permissions: ["order:fulfill"],
+    };
+    expect(effectiveVendorPermissions(fulfiller)).toEqual(
+      expect.arrayContaining(["store:read", "order:read", "order:fulfill"]),
+    );
+    expect(() => requireVendorPermission(fulfiller, "order:read")).not.toThrow();
+
+    const staffManager: VendorMembershipContext = {
+      ...staff,
+      permissions: ["staff:update"],
+    };
+    expect(effectiveVendorPermissions(staffManager)).toEqual(
+      expect.arrayContaining(["staff:read", "staff:update"]),
+    );
   });
 
   it("rejects invited or suspended memberships", () => {
