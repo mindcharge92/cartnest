@@ -27,6 +27,13 @@ import { asInventoryAvailabilityBoundary } from "./modules/inventory/inventory.p
 import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { InventoryService } from "./modules/inventory/inventory.service.js";
+import {
+  DefaultVendorAcceptancePolicy,
+  P6BaselineCheckoutFinancialPolicy,
+} from "./modules/orders/order.policy.js";
+import { PrismaOrderRepository } from "./modules/orders/order.repository.js";
+import { registerOrderRoutes } from "./modules/orders/order.routes.js";
+import { OrderService } from "./modules/orders/order.service.js";
 import { asVendorOwnershipBoundary } from "./modules/vendors/vendor.public.js";
 import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
 import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
@@ -92,6 +99,9 @@ export function buildApp(
         { name: "inventory", description: "Vendor-scoped stock, availability, and adjustment history" },
         { name: "wishlist", description: "Authenticated buyer wishlist" },
         { name: "cart", description: "Authenticated multi-store cart and checkout preview" },
+        { name: "checkout", description: "Idempotent checkout and inventory reservation" },
+        { name: "orders", description: "Buyer order history, detail, and cancellation" },
+        { name: "vendor-orders", description: "Vendor-scoped order queue and processing boundary" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -152,6 +162,15 @@ export function buildApp(
     database && catalogBoundary && inventoryBoundary
       ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryBoundary)
       : undefined;
+  const orderService =
+    database && vendorBoundary
+      ? new OrderService(
+          new PrismaOrderRepository(database),
+          vendorBoundary,
+          new P6BaselineCheckoutFinancialPolicy(),
+          new DefaultVendorAcceptancePolicy(),
+        )
+      : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
@@ -159,6 +178,7 @@ export function buildApp(
   registerInventoryRoutes(app, { service: inventoryService, authService });
   registerWishlistRoutes(app, { service: wishlistService, authService });
   registerCartRoutes(app, { service: cartService, authService });
+  registerOrderRoutes(app, { service: orderService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
