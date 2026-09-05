@@ -40,10 +40,56 @@ ALTER TABLE "CartItem"
   ADD CONSTRAINT "CartItem_quantity_positive" CHECK ("quantity" > 0);
 
 ALTER TABLE "InventoryReservation"
-  ADD CONSTRAINT "InventoryReservation_quantity_positive" CHECK ("quantity" > 0);
+  ADD CONSTRAINT "InventoryReservation_quantity_positive" CHECK ("quantity" > 0),
+  ADD CONSTRAINT "InventoryReservation_expiry_after_create" CHECK ("expiresAt" > "createdAt");
+
+CREATE UNIQUE INDEX "InventoryReservation_one_held_per_order_variant"
+  ON "InventoryReservation" ("orderId", "variantId")
+  WHERE "status" = 'HELD' AND "orderId" IS NOT NULL;
+
+ALTER TABLE "Order"
+  ADD CONSTRAINT "Order_itemSubtotal_nonnegative" CHECK ("itemSubtotalAmountMinor" >= 0),
+  ADD CONSTRAINT "Order_discount_nonnegative" CHECK ("discountAmountMinor" >= 0),
+  ADD CONSTRAINT "Order_delivery_nonnegative" CHECK ("deliveryAmountMinor" >= 0),
+  ADD CONSTRAINT "Order_tax_nonnegative" CHECK ("taxAmountMinor" >= 0),
+  ADD CONSTRAINT "Order_grandTotal_nonnegative" CHECK ("grandTotalAmountMinor" >= 0),
+  ADD CONSTRAINT "Order_total_arithmetic"
+    CHECK (
+      "grandTotalAmountMinor" =
+      "itemSubtotalAmountMinor" - "discountAmountMinor" + "deliveryAmountMinor" + "taxAmountMinor"
+    );
+
+ALTER TABLE "VendorOrder"
+  ADD CONSTRAINT "VendorOrder_itemSubtotal_nonnegative" CHECK ("itemSubtotalAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_discount_nonnegative" CHECK ("discountAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_delivery_nonnegative" CHECK ("deliveryAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_tax_nonnegative" CHECK ("taxAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_commission_rate_range" CHECK ("commissionRateBps" BETWEEN 0 AND 10000),
+  ADD CONSTRAINT "VendorOrder_commission_nonnegative" CHECK ("commissionAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_gateway_fee_nonnegative" CHECK ("gatewayFeeAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_total_nonnegative" CHECK ("totalAmountMinor" >= 0),
+  ADD CONSTRAINT "VendorOrder_total_arithmetic"
+    CHECK (
+      "totalAmountMinor" =
+      "itemSubtotalAmountMinor" - "discountAmountMinor" + "deliveryAmountMinor" + "taxAmountMinor"
+    );
 
 ALTER TABLE "OrderItem"
-  ADD CONSTRAINT "OrderItem_quantity_positive" CHECK ("quantity" > 0);
+  ADD CONSTRAINT "OrderItem_quantity_positive" CHECK ("quantity" > 0),
+  ADD CONSTRAINT "OrderItem_unit_price_nonnegative" CHECK ("unitPriceAmountMinor" >= 0),
+  ADD CONSTRAINT "OrderItem_subtotal_nonnegative" CHECK ("subtotalAmountMinor" >= 0),
+  ADD CONSTRAINT "OrderItem_discount_nonnegative" CHECK ("discountAmountMinor" >= 0),
+  ADD CONSTRAINT "OrderItem_tax_nonnegative" CHECK ("taxAmountMinor" >= 0),
+  ADD CONSTRAINT "OrderItem_line_total_nonnegative" CHECK ("lineTotalAmountMinor" >= 0),
+  ADD CONSTRAINT "OrderItem_subtotal_arithmetic"
+    CHECK ("subtotalAmountMinor" = "unitPriceAmountMinor" * "quantity"),
+  ADD CONSTRAINT "OrderItem_line_total_arithmetic"
+    CHECK (
+      "lineTotalAmountMinor" = "subtotalAmountMinor" - "discountAmountMinor" + "taxAmountMinor"
+    );
+
+ALTER TABLE "PaymentIntent"
+  ADD CONSTRAINT "PaymentIntent_amount_nonnegative" CHECK ("amountMinor" >= 0);
 
 ALTER TABLE "ReturnItem"
   ADD CONSTRAINT "ReturnItem_quantity_positive" CHECK ("quantity" > 0);
