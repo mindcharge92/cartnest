@@ -1,0 +1,31 @@
+{
+  "name": "cartnest",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CartNest multi-vendor e-commerce marketplace monorepo",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.20.0 <25",
+    "pnpm": "11.25.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "eslint . && node scripts/check-boundaries.mjs",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:check": "node scripts/check-doc-links.mjs",
+    "infra:up": "docker compose -f compose.dev.yml up -d",
+    "infra:down": "docker compose -f compose.dev.yml down",
+    "infra:logs": "docker compose -f compose.dev.yml logs -f"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "eslint": "10.9.1",
+    "prettier": "3.9.6",
+    "turbo": "2.10.12",
+    "typescript": "6.0.3"
+  }
+}
