@@ -10,7 +10,11 @@ import {
   ReadinessResponseSchema,
   SystemInfoResponseSchema,
 } from "@repo/contracts";
+import type { DatabaseClient } from "@repo/database";
 import Fastify, { type FastifyServerOptions } from "fastify";
+import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
+import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
+import { AuthService } from "./modules/auth/auth.service.js";
 
 export interface ReadinessProbes {
   readonly database: () => Promise<boolean>;
@@ -26,11 +30,14 @@ const defaultProbes: ReadinessProbes = {
 export function buildApp(
   options: FastifyServerOptions = {},
   probes: ReadinessProbes = defaultProbes,
+  database?: DatabaseClient,
 ) {
   const environment = getApiEnvironment();
   const app = Fastify({ logger: environment.nodeEnv !== "test", ...options })
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
+
+  void registerSecurityPlugins(app, environment);
 
   void app.register(swagger, {
     openapi: {
@@ -39,7 +46,10 @@ export function buildApp(
         description: "Contract-first REST API for the CartNest multi-vendor marketplace.",
         version: "1.0.0",
       },
-      tags: [{ name: "system", description: "Platform health, readiness, and API metadata" }],
+      tags: [
+        { name: "system", description: "Platform health, readiness, and API metadata" },
+        { name: "auth", description: "Identity, sessions, verification, OAuth, and MFA" },
+      ],
     },
   });
 
@@ -50,12 +60,16 @@ export function buildApp(
     });
   }
 
+  const authService = database
+    ? new AuthService(new PrismaAuthRepository(database), environment)
+    : undefined;
+  registerAuthRoutes(app, { service: authService, environment });
+
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([
       probes.database(),
       probes.redis(),
     ]);
-
     return {
       database: databaseReady ? ("ready" as const) : ("unavailable" as const),
       redis: redisReady ? ("ready" as const) : ("unavailable" as const),
@@ -95,7 +109,6 @@ export function buildApp(
         service: "cartnest-api" as const,
         dependencies,
       };
-
       return reply.code(ready ? 200 : 503).send(body);
     },
   );

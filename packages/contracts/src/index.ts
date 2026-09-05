@@ -16,13 +16,47 @@ export {
 } from "./common.js";
 
 export {
-  DependencyStateSchema,
   HealthResponseSchema,
   ReadinessResponseSchema,
+  SystemInfoResponseSchema,
   type HealthResponseDto,
   type ReadinessResponseDto,
+  type SystemInfoResponseDto,
 } from "./health.js";
 
-export { SystemInfoResponseSchema, type SystemInfoResponseDto } from "./system.js";
+export {
+  AcceptedResponseSchema,
+  AuthSessionResponseSchema,
+  AuthUserSchema,
+  GoogleOAuthStartQuerySchema,
+  LoginBodySchema,
+  MfaCodeBodySchema,
+  MfaEnrollmentResponseSchema,
+  MfaStateSchema,
+  PasswordResetConfirmBodySchema,
+  PasswordResetRequestBodySchema,
+  PlatformRoleSchema,
+  RegisterBodySchema,
+  UserStatusSchema,
+  VerificationChannelSchema,
+  VerificationConfirmBodySchema,
+  VerificationRequestBodySchema,
+  type AcceptedResponseDto,
+  type AuthSessionResponseDto,
+  type AuthUserDto,
+  type GoogleOAuthStartQueryDto,
+  type LoginBodyDto,
+  type MfaCodeBodyDto,
+  type MfaEnrollmentResponseDto,
+  type MfaStateDto,
+  type PasswordResetConfirmBodyDto,
+  type PasswordResetRequestBodyDto,
+  type PlatformRoleDto,
+  type RegisterBodyDto,
+  type UserStatusDto,
+  type VerificationChannelDto,
+  type VerificationConfirmBodyDto,
+  type VerificationRequestBodyDto,
+} from "./auth.js";
 
 export const CONTRACT_VERSION = 1 as const;

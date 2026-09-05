@@ -33,3 +33,17 @@ export function readString(source: EnvSource, key: string, fallback?: string): s
   const value = raw?.trim();
   return value ? value : undefined;
 }
+
+export function readBoolean(source: EnvSource, key: string, fallback: boolean): boolean {
+  const raw = source[key]?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return fallback;
+  if (raw === "true" || raw === "1" || raw === "yes") return true;
+  if (raw === "false" || raw === "0" || raw === "no") return false;
+  throw new Error(`${key} must be true or false.`);
+}
+
+export function readCsv(source: EnvSource, key: string, fallback: readonly string[] = []): string[] {
+  const raw = source[key];
+  if (raw === undefined || raw.trim() === "") return [...fallback];
+  return raw.split(",").map((value) => value.trim()).filter(Boolean);
+}

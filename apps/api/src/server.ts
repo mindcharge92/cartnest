@@ -13,7 +13,6 @@ let redisConnectPromise: Promise<unknown> | undefined;
 
 async function redisReady(): Promise<boolean> {
   if (!redis) return false;
-
   try {
     if (!redis.isOpen) {
       redisConnectPromise ??= redis.connect().finally(() => {
@@ -27,10 +26,14 @@ async function redisReady(): Promise<boolean> {
   }
 }
 
-const app = buildApp({}, {
-  database: async () => (database ? isDatabaseReady(database) : false),
-  redis: redisReady,
-});
+const app = buildApp(
+  {},
+  {
+    database: async () => (database ? isDatabaseReady(database) : false),
+    redis: redisReady,
+  },
+  database,
+);
 
 redis?.on("error", (error) => {
   app.log.warn({ err: error }, "Redis connectivity error");
