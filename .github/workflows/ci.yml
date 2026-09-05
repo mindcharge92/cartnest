@@ -1,57 +1,52 @@
-name: CartNest CI
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
-    name: P0 quality gates
+    name: install-validate-generate-lint-typecheck-test-build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11.25.0
           run_install: false
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-
       - name: Verify toolchain
         run: |
           node --version
           pnpm --version
-
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
-
+      - name: Validate Prisma schema
+        run: pnpm db:validate
+      - name: Generate OpenAPI and typed client
+        run: pnpm api:generate
       - name: Lint and architecture boundaries
         run: pnpm lint
-
       - name: Typecheck
         run: pnpm typecheck
-
       - name: Test
         run: pnpm test
-
       - name: Build
         run: pnpm build
-
       - name: Check documentation links
         run: pnpm docs:check
