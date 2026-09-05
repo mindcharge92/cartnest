@@ -12,8 +12,8 @@ export default function HomePage() {
             while each business keeps control of its catalog, inventory and fulfillment.
           </p>
           <div className="heroActions">
-            <Link className="primaryButton" href="/register">Create an account</Link>
-            <Link className="secondaryButton" href="/login">Sign in</Link>
+            <Link className="primaryButton" href="/marketplace">Browse marketplace</Link>
+            <Link className="secondaryButton" href="/vendor">Sell on CartNest</Link>
           </div>
         </div>
 
