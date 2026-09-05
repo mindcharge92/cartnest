@@ -19,7 +19,7 @@ function initialSelection(product: CatalogProductDetailResponseDto): Record<stri
 }
 
 export function ProductDetailBrowser({ productId }: Readonly<{ productId: string }>) {
-  const { session, status: sessionStatus } = useSession();
+  const { session, status: sessionStatus, reloadSession } = useSession();
   const [product, setProduct] = useState<CatalogProductDetailResponseDto | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -196,10 +196,15 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
               </>
             ) : sessionStatus === "loading" ? (
               <p className="formMessage">Checking your account before enabling cart and wishlist actions…</p>
-            ) : (
+            ) : sessionStatus === "unauthenticated" ? (
               <div className="actionRow">
                 <Link className="primaryButton" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in to add to cart</Link>
                 <Link className="secondaryButton" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in to save</Link>
+              </div>
+            ) : (
+              <div className="actionRow">
+                <p className="formMessage formMessageError">CartNest could not verify your session, so cart and wishlist mutations are disabled until the session check succeeds.</p>
+                <button className="secondaryButton" type="button" onClick={() => void reloadSession()}>Retry session check</button>
               </div>
             )}
           </div>
