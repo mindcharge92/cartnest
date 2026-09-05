@@ -41,5 +41,6 @@ export * from "./logistics.js";
 export * from "./returns.js";
 export * from "./admin.js";
 export * from "./admin-operations.js";
+export * from "./privacy.js";
 
 export const CONTRACT_VERSION = 1 as const;
