@@ -5,6 +5,7 @@ import {
   createCatalogApi,
   createContractRequestClient,
   createInventoryApi,
+  createLogisticsApi,
   createOrdersApi,
   createVendorApi,
   createWishlistApi,
@@ -39,6 +40,7 @@ export const inventoryApi = createInventoryApi(contractApi);
 export const wishlistApi = createWishlistApi(contractApi);
 export const cartApi = createCartApi(contractApi);
 export const ordersApi = createOrdersApi(contractApi);
+export const logisticsApi = createLogisticsApi(contractApi);
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof CartNestApiError) return error.message;
