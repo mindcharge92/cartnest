@@ -33,6 +33,23 @@ services:
     expose: ["3000"]
     networks: [edge]
 
+  migrate:
+    image: ${API_IMAGE:-cartnest-api:${RELEASE_SHA:-staging}}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    profiles: ["migration"]
+    env_file:
+      - ${STAGING_ENV_FILE:-./staging.env}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-cartnest}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-cartnest}}
+    command: ["pnpm", "--filter", "@repo/database", "db:migrate:deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+
   api:
     image: ${API_IMAGE:-cartnest-api:${RELEASE_SHA:-staging}}
     build:
@@ -80,7 +97,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks: [private]
+    networks: [private, egress]
 
   postgres:
     image: postgres:17-alpine
@@ -113,6 +130,7 @@ services:
 
 networks:
   edge:
+  egress:
   private:
     internal: true
 
