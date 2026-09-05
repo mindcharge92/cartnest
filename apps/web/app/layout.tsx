@@ -5,8 +5,12 @@ import { SessionProvider } from "../components/session-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CartNest",
-  description: "Multi-vendor e-commerce marketplace for Nigerian businesses.",
+  title: {
+    default: "CartNest",
+    template: "%s · CartNest",
+  },
+  description: "A multi-vendor e-commerce marketplace for Nigerian businesses and customers.",
+  applicationName: "CartNest",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

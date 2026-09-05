@@ -1,30 +1,47 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession } from "./session-provider";
 
 export function AppHeader() {
+  const pathname = usePathname();
   const { session, status, logout } = useSession();
-  const privileged = session?.user.platformRole === "ADMIN" || session?.user.platformRole === "SUPER_ADMIN";
+
   return (
-    <header className="topbar">
-      <Link className="brand" href="/">CartNest</Link>
-      <nav className="nav" aria-label="Primary navigation">
-        <Link href="/">Marketplace</Link>
-        {status === "authenticated" ? (
-          <>
-            <Link href="/account">Account</Link>
-            {privileged ? <Link href="/admin">Admin</Link> : null}
-            {session?.mfa.required && !session.mfa.satisfied ? <Link href="/mfa">Verify MFA</Link> : null}
-            <button className="linkButton" type="button" onClick={() => void logout()}>Sign out</button>
-          </>
-        ) : status === "unauthenticated" ? (
-          <>
-            <Link href="/login">Sign in</Link>
-            <Link href="/register">Create account</Link>
-          </>
-        ) : null}
-      </nav>
+    <header className="siteHeader">
+      <div className="headerInner">
+        <Link className="brand" href="/" aria-label="CartNest home">
+          <span className="brandMark" aria-hidden="true">C</span>
+          <span>CartNest</span>
+        </Link>
+
+        <nav className="primaryNav" aria-label="Primary navigation">
+          <Link className="navLink" aria-current={pathname === "/" ? "page" : undefined} href="/">
+            Marketplace
+          </Link>
+          {status === "authenticated" ? (
+            <>
+              <Link className="navLink" aria-current={pathname.startsWith("/account") ? "page" : undefined} href="/account">
+                Account
+              </Link>
+              {session?.mfa.required && !session.mfa.satisfied ? (
+                <Link className="navLink navLinkAlert" href="/mfa">Verify MFA</Link>
+              ) : null}
+              <button className="navButton" type="button" onClick={() => void logout()}>Sign out</button>
+            </>
+          ) : status === "unauthenticated" ? (
+            <>
+              <Link className="navLink" href="/login">Sign in</Link>
+              <Link className="headerCta" href="/register">Create account</Link>
+            </>
+          ) : status === "loading" ? (
+            <span className="navStatus" aria-live="polite">Checking session…</span>
+          ) : (
+            <Link className="navLink" href="/login">Sign in</Link>
+          )}
+        </nav>
+      </div>
     </header>
   );
 }

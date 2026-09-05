@@ -1,28 +1,54 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, apiErrorMessage } from "../../lib/api";
 
 export default function ResetPasswordPage() {
-  const params = useSearchParams();
-  const [token, setToken] = useState(params.get("token") ?? "");
+  const [token, setToken] = useState("");
+  const [tokenFromUrl, setTokenFromUrl] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("token");
+    if (value) {
+      setToken(value);
+      setTokenFromUrl(true);
+    }
+  }, []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const result = await api.POST("/api/v1/auth/password-reset/confirm", { body: { token, newPassword } });
-    setMessage(result.data ? "Password changed. Sign in again on all devices." : apiErrorMessage(result.error, "Reset failed."));
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await api.POST("/api/v1/auth/password-reset/confirm", { body: { token: token.trim(), newPassword } });
+      if (!result.data) {
+        setError(apiErrorMessage(result.error, "Password reset failed."));
+        return;
+      }
+      setMessage("Password changed. Existing sessions have been revoked; sign in again.");
+      setNewPassword("");
+    } catch {
+      setError("CartNest could not reach the password-reset service. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
+
   return (
     <main className="authShell">
       <form className="authCard" onSubmit={submit}>
-        <p className="eyebrow">Security</p><h1 className="authTitle">Choose a new password</h1>
-        <label>Reset token<input value={token} onChange={(e) => setToken(e.target.value)} required /></label>
-        <label>New password<input type="password" minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></label>
-        {message ? <p className="formMessage" role="status">{message}</p> : null}
-        <button className="primaryButton">Update password</button>
+        <div className="authHeader"><p className="eyebrow">Account security</p><h1 className="authTitle">Choose a new password</h1><p className="muted">A successful reset revokes existing sessions as part of the account recovery flow.</p></div>
+        {!tokenFromUrl ? <label className="field">Reset token<input value={token} onChange={(event) => setToken(event.target.value)} autoComplete="one-time-code" required /></label> : null}
+        <label className="field">New password<input type="password" minLength={12} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" required /><span className="fieldHint">Use at least 12 characters.</span></label>
+        {message ? <p className="formMessage formMessageSuccess" role="status">{message}</p> : null}
+        {error ? <p className="formMessage formMessageError" role="alert">{error}</p> : null}
+        <button className="primaryButton" type="submit" disabled={busy || !token}>{busy ? "Updating…" : "Update password"}</button>
         <div className="formLinks"><Link href="/login">Sign in</Link></div>
       </form>
     </main>

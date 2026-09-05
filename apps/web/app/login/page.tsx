@@ -2,41 +2,52 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
 import { API_BASE_URL, api, apiErrorMessage } from "../../lib/api";
+import { safeReturnTo } from "../../lib/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { reloadSession } = useSession();
+  const { adoptSession } = useSession();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [returnTo, setReturnTo] = useState("/account");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setReturnTo(safeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
-    const result = await api.POST("/api/v1/auth/login", { body: { identifier, password } });
-    setBusy(false);
-    if (!result.data) {
-      setMessage(apiErrorMessage(result.error, "Unable to sign in."));
-      return;
+    try {
+      const result = await api.POST("/api/v1/auth/login", { body: { identifier: identifier.trim(), password } });
+      if (!result.data) {
+        setMessage(apiErrorMessage(result.error, "Unable to sign in."));
+        return;
+      }
+      adoptSession(result.data);
+      router.replace(result.data.mfa.required && !result.data.mfa.satisfied ? "/mfa" : returnTo);
+    } catch {
+      setMessage("CartNest could not reach the sign-in service. Try again.");
+    } finally {
+      setBusy(false);
     }
-    await reloadSession();
-    router.push(result.data.mfa.required && !result.data.mfa.satisfied ? "/mfa" : "/account");
   }
 
   return (
     <main className="authShell">
       <form className="authCard" onSubmit={submit}>
-        <p className="eyebrow">Welcome back</p>
-        <h1 className="authTitle">Sign in</h1>
-        <label>Email or phone<input value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
-        {message ? <p className="formMessage" role="alert">{message}</p> : null}
-        <button className="primaryButton" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        <div className="authHeader"><p className="eyebrow">Welcome back</p><h1 className="authTitle">Sign in</h1><p className="muted">Use the email address or phone number attached to your CartNest account.</p></div>
+        <label className="field">Email or phone<input value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" inputMode="email" required /></label>
+        <label className="field">Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
+        {message ? <p className="formMessage formMessageError" role="alert">{message}</p> : null}
+        <button className="primaryButton" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        <div className="authDivider">or</div>
         <a className="secondaryButton" href={`${API_BASE_URL}/api/v1/auth/google/start`}>Continue with Google</a>
         <div className="formLinks"><Link href="/forgot-password">Forgot password?</Link><Link href="/register">Create account</Link></div>
       </form>

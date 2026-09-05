@@ -1,14 +1,12 @@
 # CartNest
 
-CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
+CartNest is a multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current backend phase:** P12 — Staging, UAT, and Operational Rehearsal. Backend/domain source baselines for P0–P11 are implemented, and P12 now has the production-like container/staging/rehearsal harness. **P12 has not passed its exit gate yet**: GitHub Actions is still returning zero-job `BuildFailed/startup_failure`, the repository does not yet contain an executable Prisma migration history, no staging host/provider credentials have been exercised, and the worker remains a heartbeat foundation rather than a completed BullMQ/dead-letter runtime. Frontend/UI and generated-client integration remain intentionally deferred until the backend/operations sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
+**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. The web pass now mirrors the backend phases so buyer, vendor and admin UI is integrated incrementally rather than postponed to one final frontend rewrite.
 
-P12 adds immutable-image Docker definitions for web/API/worker, self-contained and immutable-image staging Compose stacks, Caddy staging routing, a staging environment template, staging preflight and smoke-evidence scripts, a GitHub staging-release workflow, a complete UAT/operational rehearsal plan, and a reusable evidence-report template.
+The first frontend batch, **FP0–FP2**, establishes the responsive marketplace shell, shared loading/error states, secure typed-client browser transport, improved session handling, login/registration/recovery, contact verification, MFA and account-security interfaces.
 
-GIGL quoting/tracking have provider-adapter source baselines, while live GIGL shipment booking remains deliberately gated until CartNest's contracted preshipment request/response is verified in the provider sandbox rather than guessed from generic public documentation.
-
-See [`docs/implementation/p12-status.md`](docs/implementation/p12-status.md) for the current phase record and [`docs/operations/staging-uat-and-rehearsal-plan.md`](docs/operations/staging-uat-and-rehearsal-plan.md) for the execution plan.
+See [`docs/implementation/frontend-integration-plan.md`](docs/implementation/frontend-integration-plan.md) and [`docs/implementation/frontend-p0-p2-status.md`](docs/implementation/frontend-p0-p2-status.md).
 
 ## Approved Stack
 
@@ -51,28 +49,24 @@ packages/
   typescript-config/
 ```
 
-## Repository Documentation
+## Implementation Tracks
 
-Start with [`docs/README.md`](docs/README.md).
-
-The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, logistics, returns/refunds/reviews, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, privacy/erasure, staging/UAT rehearsals, and the production runbook.
-
-Implementation records currently exist for:
+Backend/domain records exist for P0–P11, with P12 rehearsal tooling prepared. The frontend pass now proceeds as:
 
 ```text
-P0  Repository/tooling foundation
-P1  Database + contracts foundation
-P2  Identity/auth/session/authorization
-P3  Vendor/store/KYC/membership
-P4  Catalog/variants/media
-P5  Inventory/wishlist/cart
-P6  Checkout/reservations/multi-vendor orders
-P7  Payments/commission/webhooks/reconciliation
-P8  Logistics/shipping quotes/shipments/tracking
-P9  Returns/refunds/reviews
-P10 Admin/analytics/promotions/tax/notifications
-P11 Hardening/performance/security/NDPR
-P12 Staging/UAT/operational rehearsal harness
+FP0  Web foundation / design system / app shell
+FP1  Typed API integration / shared states
+FP2  Identity / sessions / verification / MFA
+FP3  Vendor onboarding / stores / KYC / staff
+FP4  Marketplace catalog / products / media
+FP5  Inventory / wishlist / cart
+FP6  Checkout / orders
+FP7  Payments
+FP8  Logistics / tracking
+FP9  Returns / refunds / reviews
+FP10 Admin / analytics / promotions / notifications
+FP11 Privacy / accessibility / security / performance
+FP12 End-to-end integration / UAT
 ```
 
 ## Local Setup
@@ -107,7 +101,7 @@ pnpm build
 pnpm docs:check
 ```
 
-Operational and P12 rehearsal commands include:
+Operational commands include:
 
 ```bash
 pnpm perf:benchmark
@@ -115,12 +109,6 @@ pnpm db:backup
 pnpm db:restore
 pnpm p12:preflight
 pnpm p12:smoke
-pnpm staging:config
-pnpm staging:build
-pnpm staging:up
-pnpm staging:down
 ```
 
-`pnpm format` and `pnpm format:check` are also available for repository formatting.
-
-Production launch must not begin merely because P12 tooling exists. P12 requires actual staging evidence and must satisfy [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md) before P13 launch preparation is considered passed.
+Production feature implementation must follow [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md), the frontend engineering standard and the governing ADRs rather than framework defaults.
