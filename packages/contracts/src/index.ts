@@ -139,7 +139,6 @@ export {
 } from "./vendor.js";
 
 export {
-  CatalogProductDetailSchema,
   CatalogProductListResponseSchema,
   CatalogProductSummarySchema,
   CatalogQuerySchema,
@@ -226,6 +225,7 @@ export {
 } from "./catalog.js";
 
 export {
+  CatalogProductDetailResponseSchema as CatalogProductDetailSchema,
   CatalogProductDetailResponseSchema,
   type CatalogProductDetailResponseDto,
 } from "./catalog-public-detail.js";
