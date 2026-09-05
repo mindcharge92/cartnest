@@ -18,5 +18,6 @@ export { createInventoryApi, type InventoryApi } from "./inventory.js";
 export { createWishlistApi, type WishlistApi } from "./wishlist.js";
 export { createCartApi, type CartApi } from "./cart.js";
 export { createOrdersApi, type OrdersApi } from "./orders.js";
+export { createLogisticsApi, type LogisticsApi } from "./logistics.js";
 
 export type { paths as CartNestApiPaths } from "./generated/schema.js";
