@@ -138,11 +138,11 @@ describe("P10 admin, analytics, promotion, tax, and notification contract surfac
     expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
   });
 
-  it("exposes the standard unavailable envelope when notification persistence is absent", async () => {
+  it("keeps authentication authoritative before notification storage availability", async () => {
     const app = buildApp({ logger: false }, readyProbes);
     apps.push(app);
     const response = await app.inject({ method: "GET", url: "/api/v1/notifications" });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({ error: { code: "NOTIFICATION_SERVICE_UNAVAILABLE" } });
+    expect(response.json()).toMatchObject({ error: { code: "AUTH_UNAVAILABLE" } });
   });
 });
