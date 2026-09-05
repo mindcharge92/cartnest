@@ -3,6 +3,7 @@ import type {
   CatalogProductDetailDto,
   WishlistItemDto,
   WishlistResponseDto,
+  WishlistUnavailableItemDto,
 } from "@repo/contracts";
 import type { AccessPrincipal } from "../auth/auth.public.js";
 import type { CatalogCommerceBoundary } from "../catalog/catalog.public.js";
@@ -34,6 +35,15 @@ function productSummary(product: CatalogProductDetailDto) {
   };
 }
 
+function unavailableItem(item: WishlistItemRecord): WishlistUnavailableItemDto {
+  return {
+    id: item.id,
+    productId: item.productId,
+    variantId: item.variantId,
+    createdAt: item.createdAt.toISOString(),
+  };
+}
+
 export class WishlistService {
   constructor(
     private readonly repository: WishlistRepository,
@@ -46,6 +56,7 @@ export class WishlistService {
     const variant = item.variantId
       ? product.variants.find((candidate) => candidate.id === item.variantId) ?? null
       : null;
+    if (item.variantId && !variant) return null;
     return {
       id: item.id,
       product: productSummary(product),
@@ -56,9 +67,19 @@ export class WishlistService {
 
   private async toResponse(record: WishlistRecord): Promise<WishlistResponseDto> {
     const mapped = await Promise.all(record.items.map((item) => this.mapItem(item)));
+    const items: WishlistItemDto[] = [];
+    const unavailableItems: WishlistUnavailableItemDto[] = [];
+
+    for (const [index, source] of record.items.entries()) {
+      const item = mapped[index];
+      if (item) items.push(item);
+      else unavailableItems.push(unavailableItem(source));
+    }
+
     return {
       id: record.id,
-      items: mapped.filter((item): item is WishlistItemDto => item !== null),
+      items,
+      unavailableItems,
       updatedAt: record.updatedAt.toISOString(),
     };
   }
