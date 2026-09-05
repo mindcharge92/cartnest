@@ -1,6 +1,7 @@
 import {
   CartNestApiError,
   createCartNestApiClient,
+  createCatalogApi,
   createContractRequestClient,
   createVendorApi,
 } from "@repo/api-client";
@@ -29,6 +30,7 @@ const browserFetch: typeof globalThis.fetch = async (input, init) => {
 export const api = createCartNestApiClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
 const contractApi = createContractRequestClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
 export const vendorApi = createVendorApi(contractApi);
+export const catalogApi = createCatalogApi(contractApi);
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof CartNestApiError) return error.message;
