@@ -28,6 +28,13 @@ export interface ApiEnvironment {
   readonly r2SecretAccessKey: string | undefined;
   readonly r2Bucket: string | undefined;
   readonly r2PublicBaseUrl: string | undefined;
+  readonly paystackSecretKey: string | undefined;
+  readonly paystackBaseUrl: string;
+  readonly flutterwaveSecretKey: string | undefined;
+  readonly flutterwaveSecretHash: string | undefined;
+  readonly flutterwaveBaseUrl: string;
+  readonly paymentCallbackUrl: string;
+  readonly paymentCollectionSplitsEnabled: boolean;
 }
 
 function requiredSecret(
@@ -50,6 +57,9 @@ export function getApiEnvironment(source: NodeJS.ProcessEnv = process.env): ApiE
   const googleRedirectUri =
     readUrl(source, "GOOGLE_REDIRECT_URI") ??
     new URL("/api/v1/auth/google/callback", apiPublicBaseUrl).toString();
+  const paymentCallbackUrl =
+    readUrl(source, "PAYMENT_CALLBACK_URL") ??
+    new URL("/payment/callback", webBaseUrl).toString();
   const corsOrigins = readCsv(source, "CORS_ORIGINS", [new URL(webBaseUrl).origin]).map(
     (origin) => new URL(origin).origin,
   );
@@ -85,5 +95,15 @@ export function getApiEnvironment(source: NodeJS.ProcessEnv = process.env): ApiE
     r2SecretAccessKey: readString(source, "R2_SECRET_ACCESS_KEY"),
     r2Bucket: readString(source, "R2_BUCKET"),
     r2PublicBaseUrl: readUrl(source, "R2_PUBLIC_BASE_URL"),
+    paystackSecretKey: readString(source, "PAYSTACK_SECRET_KEY"),
+    paystackBaseUrl:
+      readUrl(source, "PAYSTACK_BASE_URL", "https://api.paystack.co/") ?? "https://api.paystack.co/",
+    flutterwaveSecretKey: readString(source, "FLUTTERWAVE_SECRET_KEY"),
+    flutterwaveSecretHash: readString(source, "FLUTTERWAVE_SECRET_HASH"),
+    flutterwaveBaseUrl:
+      readUrl(source, "FLUTTERWAVE_BASE_URL", "https://api.flutterwave.com/v3/") ??
+      "https://api.flutterwave.com/v3/",
+    paymentCallbackUrl,
+    paymentCollectionSplitsEnabled: readBoolean(source, "PAYMENT_COLLECTION_SPLITS_ENABLED", false),
   });
 }
