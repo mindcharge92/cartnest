@@ -6,7 +6,6 @@ import type {
   MediaOwnerTypeDto,
   MediaStatusDto,
   ModerationStatusDto,
-  ProductModerationBodyDto,
   ProductStatusDto,
   UpdateCategoryBodyDto,
   UpdateMediaBodyDto,
@@ -145,7 +144,7 @@ export interface CatalogRepository {
   createProduct(storeId: string, input: CreateProductBodyDto): Promise<ProductRecord>;
   updateProduct(productId: string, input: UpdateProductBodyDto): Promise<ProductRecord | null>;
   setProductStatus(productId: string, status: ProductStatusDto, archivedAt?: Date | null): Promise<ProductRecord | null>;
-  setModerationStatus(productId: string, status: ProductModerationBodyDto["status"]): Promise<ProductRecord | null>;
+  setModerationStatus(productId: string, status: ModerationStatusDto): Promise<ProductRecord | null>;
   listModerationProducts(status?: ModerationStatusDto): Promise<ProductRecord[]>;
   listProductOptionValues(productId: string, ids: readonly string[]): Promise<Array<ProductOptionValueRecord & { readonly option: { readonly id: string; readonly name: string } }>>;
   createVariant(productId: string, storeId: string, input: CreateProductVariantFromIdsBodyDto): Promise<VariantRecord>;
@@ -373,13 +372,13 @@ export class PrismaCatalogRepository implements CatalogRepository {
     return this.findProduct(productId);
   }
 
-  async setModerationStatus(productId: string, status: ProductModerationBodyDto["status"]): Promise<ProductRecord | null> {
+  async setModerationStatus(productId: string, status: ModerationStatusDto): Promise<ProductRecord | null> {
     if (!(await this.findProduct(productId))) return null;
     await this.database.product.update({
       where: { id: productId },
       data: {
         moderationStatus: status,
-        ...(status === "FLAGGED" || status === "REJECTED" ? { status: "DRAFT" } : {}),
+        ...(["PENDING", "FLAGGED", "REJECTED"].includes(status) ? { status: "DRAFT" } : {}),
       },
     });
     return this.findProduct(productId);
