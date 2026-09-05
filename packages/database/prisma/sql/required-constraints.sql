@@ -53,3 +53,18 @@ ALTER TABLE "StoreReview"
 CREATE UNIQUE INDEX "WishlistItem_product_without_variant_unique"
   ON "WishlistItem" ("wishlistId", "productId")
   WHERE "variantId" IS NULL;
+
+-- P4 catalog indexes. The public catalog always filters on active products with
+-- publishable moderation states, and text search uses case-insensitive contains.
+CREATE INDEX "Product_public_catalog_created_idx"
+  ON "Product" ("createdAt" DESC)
+  WHERE "status" = 'ACTIVE'
+    AND "moderationStatus" IN ('NOT_REQUIRED', 'APPROVED');
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX "Product_name_trgm_idx"
+  ON "Product" USING GIN ("name" gin_trgm_ops);
+
+CREATE INDEX "Product_description_trgm_idx"
+  ON "Product" USING GIN ("description" gin_trgm_ops);
