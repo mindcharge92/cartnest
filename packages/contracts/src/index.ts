@@ -217,6 +217,7 @@ export {
   type UpdateProductBodyDto,
   type UpdateProductVariantBodyDto,
   type VariantIdParamsDto,
+  type VariantOptionSelectionDto,
   type VariantStatusDto,
   type VendorMediaDto,
   type VendorProductDto,
