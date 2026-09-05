@@ -1,4 +1,9 @@
-import { createCartNestApiClient } from "@repo/api-client";
+import {
+  CartNestApiError,
+  createCartNestApiClient,
+  createContractRequestClient,
+  createVendorApi,
+} from "@repo/api-client";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000").replace(/\/+$/, "");
 
@@ -22,11 +27,23 @@ const browserFetch: typeof globalThis.fetch = async (input, init) => {
 };
 
 export const api = createCartNestApiClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
+const contractApi = createContractRequestClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
+export const vendorApi = createVendorApi(contractApi);
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof CartNestApiError) return error.message;
   if (error && typeof error === "object" && "error" in error) {
     const envelope = (error as { error?: { message?: unknown } }).error;
     if (envelope && typeof envelope.message === "string") return envelope.message;
   }
   return fallback;
+}
+
+export function apiErrorCode(error: unknown): string | undefined {
+  if (error instanceof CartNestApiError) return error.code;
+  if (error && typeof error === "object" && "error" in error) {
+    const envelope = (error as { error?: { code?: unknown } }).error;
+    return typeof envelope?.code === "string" ? envelope.code : undefined;
+  }
+  return undefined;
 }
