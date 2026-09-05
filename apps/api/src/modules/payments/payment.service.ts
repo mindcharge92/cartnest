@@ -260,6 +260,20 @@ export class PaymentService {
     if (begin.kind === "already_paid") {
       throw new PaymentError("PAYMENT_ALREADY_SUCCEEDED", "This payment has already succeeded.", 409);
     }
+    if (begin.kind === "not_payable") {
+      throw new PaymentError(
+        "PAYMENT_NOT_PAYABLE",
+        "This order is no longer in a state that can accept a new payment.",
+        409,
+      );
+    }
+    if (begin.kind === "reservation_expired") {
+      throw new PaymentError(
+        "PAYMENT_RESERVATION_EXPIRED",
+        "The checkout inventory reservation has expired. Do not pay this order; return to the marketplace and create a new checkout.",
+        409,
+      );
+    }
     if (begin.kind === "active_attempt") {
       throw new PaymentError(
         "PAYMENT_ATTEMPT_ACTIVE",
