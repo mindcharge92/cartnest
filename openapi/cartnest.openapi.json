@@ -1,0 +1,111 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CartNest API",
+    "description": "Contract-first REST API for the CartNest multi-vendor marketplace.",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "Platform health, readiness, and API metadata"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": ["system"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "HealthResponse",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status", "service", "uptimeSeconds"],
+                  "properties": {
+                    "status": { "const": "ok", "type": "string" },
+                    "service": { "const": "cartnest-api", "type": "string" },
+                    "uptimeSeconds": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "tags": ["system"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReadinessResponse" } } }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReadinessResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/system/info": {
+      "get": {
+        "operationId": "getSystemInfo",
+        "tags": ["system"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SystemInfoResponse" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ReadinessResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "service", "dependencies"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ready", "not-ready"] },
+          "service": { "type": "string", "const": "cartnest-api" },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["database", "redis"],
+            "properties": {
+              "database": { "type": "string", "enum": ["ready", "unavailable"] },
+              "redis": { "type": "string", "enum": ["ready", "unavailable"] }
+            }
+          }
+        }
+      },
+      "SystemInfoResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["service", "apiVersion", "timestamp", "dependencies"],
+        "properties": {
+          "service": { "type": "string", "const": "cartnest-api" },
+          "apiVersion": { "type": "string", "const": "v1" },
+          "timestamp": { "type": "string" },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["database", "redis"],
+            "properties": {
+              "database": { "type": "string", "enum": ["ready", "unavailable"] },
+              "redis": { "type": "string", "enum": ["ready", "unavailable"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

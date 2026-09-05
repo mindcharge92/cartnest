@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildApp } from "./app.js";
+import { buildApp, type ReadinessProbes } from "./app.js";
 
 const apps: Array<ReturnType<typeof buildApp>> = [];
+const readyProbes: ReadinessProbes = {
+  database: async () => true,
+  redis: async () => true,
+};
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
 describe("system endpoints", () => {
-  it("reports the API as healthy using the shared response contract", async () => {
+  it("reports the API as healthy", async () => {
     const app = buildApp({ logger: false });
     apps.push(app);
 
@@ -18,7 +22,20 @@ describe("system endpoints", () => {
     expect(response.json()).toMatchObject({ status: "ok", service: "cartnest-api" });
   });
 
-  it("reports degraded readiness when the database is unavailable", async () => {
+  it("reports ready only when database and Redis probes succeed", async () => {
+    const app = buildApp({ logger: false }, readyProbes);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: "ready",
+      dependencies: { database: "ready", redis: "ready" },
+    });
+  });
+
+  it("reports not-ready when dependencies are unavailable", async () => {
     const app = buildApp({ logger: false });
     apps.push(app);
 
@@ -26,17 +43,22 @@ describe("system endpoints", () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
-      status: "degraded",
-      dependencies: { database: "not-ready" },
+      status: "not-ready",
+      dependencies: { database: "unavailable", redis: "unavailable" },
     });
   });
 
-  it("publishes an OpenAPI operation for the health endpoint", async () => {
-    const app = buildApp({ logger: false });
+  it("exposes the versioned system contract", async () => {
+    const app = buildApp({ logger: false }, readyProbes);
     apps.push(app);
-    await app.ready();
 
-    const spec = app.swagger();
-    expect(spec.paths?.["/health"]?.get?.operationId).toBe("getHealth");
+    const response = await app.inject({ method: "GET", url: "/api/v1/system/info" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      service: "cartnest-api",
+      apiVersion: "v1",
+      dependencies: { database: "ready", redis: "ready" },
+    });
   });
 });

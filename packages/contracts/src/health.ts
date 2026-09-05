@@ -1,4 +1,9 @@
-import { Static, Type } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
+
+export const DependencyStateSchema = Type.Union([
+  Type.Literal("ready"),
+  Type.Literal("unavailable"),
+]);
 
 export const HealthResponseSchema = Type.Object(
   {
@@ -12,12 +17,15 @@ export type HealthResponseDto = Static<typeof HealthResponseSchema>;
 
 export const ReadinessResponseSchema = Type.Object(
   {
-    status: Type.Union([Type.Literal("ready"), Type.Literal("degraded")]),
+    status: Type.Union([Type.Literal("ready"), Type.Literal("not-ready")]),
     service: Type.Literal("cartnest-api"),
-    dependencies: Type.Object({
-      database: Type.Union([Type.Literal("ready"), Type.Literal("not-ready")]),
-      redis: Type.Union([Type.Literal("configured"), Type.Literal("not-configured")]),
-    }),
+    dependencies: Type.Object(
+      {
+        database: DependencyStateSchema,
+        redis: DependencyStateSchema,
+      },
+      { additionalProperties: false },
+    ),
   },
   { additionalProperties: false },
 );

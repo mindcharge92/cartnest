@@ -1,14 +1,36 @@
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import {
+  TypeBoxTypeProvider,
+  TypeBoxValidatorCompiler,
+} from "@fastify/type-provider-typebox";
 import { getApiEnvironment } from "@repo/config/api";
-import { HealthResponseSchema, ReadinessResponseSchema } from "@repo/contracts";
-import { createDatabaseClient, isDatabaseReady } from "@repo/database";
+import {
+  HealthResponseSchema,
+  ReadinessResponseSchema,
+  SystemInfoResponseSchema,
+} from "@repo/contracts";
 import Fastify, { type FastifyServerOptions } from "fastify";
 
-export function buildApp(options: FastifyServerOptions = {}) {
+export interface ReadinessProbes {
+  readonly database: () => Promise<boolean>;
+  readonly redis: () => Promise<boolean>;
+}
+
+const unavailableProbe = async () => false;
+const defaultProbes: ReadinessProbes = {
+  database: unavailableProbe,
+  redis: unavailableProbe,
+};
+
+export function buildApp(
+  options: FastifyServerOptions = {},
+  probes: ReadinessProbes = defaultProbes,
+) {
   const environment = getApiEnvironment();
-  const app = Fastify({ logger: environment.nodeEnv !== "test", ...options }).withTypeProvider<TypeBoxTypeProvider>();
+  const app = Fastify({ logger: environment.nodeEnv !== "test", ...options })
+    .setValidatorCompiler(TypeBoxValidatorCompiler)
+    .withTypeProvider<TypeBoxTypeProvider>();
 
   void app.register(swagger, {
     openapi: {
@@ -17,8 +39,7 @@ export function buildApp(options: FastifyServerOptions = {}) {
         description: "Contract-first REST API for the CartNest multi-vendor marketplace.",
         version: "1.0.0",
       },
-      servers: [{ url: "/api/v1", description: "Versioned CartNest API" }],
-      tags: [{ name: "system", description: "Platform health and readiness" }],
+      tags: [{ name: "system", description: "Platform health, readiness, and API metadata" }],
     },
   });
 
@@ -29,14 +50,16 @@ export function buildApp(options: FastifyServerOptions = {}) {
     });
   }
 
-  const database = environment.databaseUrl
-    ? createDatabaseClient({ connectionString: environment.databaseUrl })
-    : undefined;
+  async function dependencyStates() {
+    const [databaseReady, redisReady] = await Promise.all([
+      probes.database(),
+      probes.redis(),
+    ]);
 
-  if (database) {
-    app.addHook("onClose", async () => {
-      await database.$disconnect();
-    });
+    return {
+      database: databaseReady ? ("ready" as const) : ("unavailable" as const),
+      redis: redisReady ? ("ready" as const) : ("unavailable" as const),
+    };
   }
 
   app.get(
@@ -65,19 +88,33 @@ export function buildApp(options: FastifyServerOptions = {}) {
       },
     },
     async (_request, reply) => {
-      const databaseReady = database ? await isDatabaseReady(database) : false;
-      const ready = databaseReady;
+      const dependencies = await dependencyStates();
+      const ready = dependencies.database === "ready" && dependencies.redis === "ready";
       const body = {
-        status: ready ? ("ready" as const) : ("degraded" as const),
+        status: ready ? ("ready" as const) : ("not-ready" as const),
         service: "cartnest-api" as const,
-        dependencies: {
-          database: databaseReady ? ("ready" as const) : ("not-ready" as const),
-          redis: environment.redisUrl ? ("configured" as const) : ("not-configured" as const),
-        },
+        dependencies,
       };
 
       return reply.code(ready ? 200 : 503).send(body);
     },
+  );
+
+  app.get(
+    "/api/v1/system/info",
+    {
+      schema: {
+        tags: ["system"],
+        operationId: "getSystemInfo",
+        response: { 200: SystemInfoResponseSchema },
+      },
+    },
+    async () => ({
+      service: "cartnest-api" as const,
+      apiVersion: "v1" as const,
+      timestamp: new Date().toISOString(),
+      dependencies: await dependencyStates(),
+    }),
   );
 
   return app;

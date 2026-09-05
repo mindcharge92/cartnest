@@ -1,12 +1,52 @@
 import { getApiEnvironment } from "@repo/config/api";
+import { createDatabaseClient, isDatabaseReady } from "@repo/database";
+import { createClient } from "redis";
 import { buildApp } from "./app.js";
 
 const environment = getApiEnvironment();
-const app = buildApp();
+const database = environment.databaseUrl
+  ? createDatabaseClient({ connectionString: environment.databaseUrl })
+  : undefined;
+const redis = environment.redisUrl ? createClient({ url: environment.redisUrl }) : undefined;
+
+let redisConnectPromise: Promise<unknown> | undefined;
+
+async function redisReady(): Promise<boolean> {
+  if (!redis) return false;
+
+  try {
+    if (!redis.isOpen) {
+      redisConnectPromise ??= redis.connect().finally(() => {
+        redisConnectPromise = undefined;
+      });
+      await redisConnectPromise;
+    }
+    return (await redis.ping()) === "PONG";
+  } catch {
+    return false;
+  }
+}
+
+const app = buildApp({}, {
+  database: async () => (database ? isDatabaseReady(database) : false),
+  redis: redisReady,
+});
+
+redis?.on("error", (error) => {
+  app.log.warn({ err: error }, "Redis connectivity error");
+});
+
+async function closeDependencies() {
+  await Promise.allSettled([
+    database?.$disconnect(),
+    redis?.isOpen ? redis.close() : Promise.resolve(),
+  ]);
+}
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, "Shutting down CartNest API");
   await app.close();
+  await closeDependencies();
 }
 
 process.once("SIGINT", () => {
@@ -22,6 +62,7 @@ async function start() {
     await app.listen({ host: environment.host, port: environment.port });
   } catch (error) {
     app.log.error(error);
+    await closeDependencies();
     process.exitCode = 1;
   }
 }
