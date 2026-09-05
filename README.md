@@ -2,14 +2,15 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-The repository is intentionally starting with architecture, product, security, API, data, implementation, operations, and engineering standards before implementation code is introduced.
+The repository is now entering **P0 — Repository and Tooling Foundation**. Architecture, product, security, API, data, operational, and implementation documentation already exists under `docs/`; the application monorepo scaffold is being introduced according to that approved baseline.
 
-## Planned Stack
+## Approved Stack
 
 - Next.js + TypeScript
 - Fastify + TypeScript
-- Turborepo
+- Turborepo + pnpm
 - PostgreSQL + Prisma
+- Redis + BullMQ worker architecture
 - Modular monolith
 - TypeBox shared contracts
 - OpenAPI + typed API client
@@ -17,42 +18,49 @@ The repository is intentionally starting with architecture, product, security, A
 - Cloudflare R2
 - Docker + GitHub Actions
 
-## Documentation
+## Toolchain Baseline
+
+- Node.js `24.20.0` LTS
+- pnpm `11.25.0`
+- Turborepo `2.10.12`
+- TypeScript `6.0.3`
+
+## Repository Documentation
 
 Start with [`docs/README.md`](docs/README.md).
 
-The documentation covers:
+The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
 
-- product feature scope and approved business decisions;
-- system architecture;
-- API contract strategy;
-- modular monolith boundaries;
-- monorepo/package boundaries;
-- authentication, RBAC, and resource ownership;
-- money and currency handling;
-- multi-vendor orders;
-- payment gateway architecture;
-- API versioning;
-- media/object storage;
-- idempotency and concurrency;
-- backend/frontend standards;
-- error handling;
-- testing and quality gates;
-- API endpoint design;
-- database/domain model;
-- exact implementation phases;
-- Prisma schema and migrations;
-- deployment and operations;
-- observability;
-- background jobs and events;
-- notifications;
-- provider integrations;
-- threat modeling;
-- backup/disaster recovery;
-- production runbooks.
+## P0 Local Setup
 
-## Current Phase
+After the P0 scaffold is complete, a fresh clone should use:
 
-**Phase: Architecture, specification, and implementation planning**
+```bash
+corepack enable
+corepack prepare pnpm@11.25.0 --activate
+pnpm install
+pnpm infra:up
+pnpm build
+pnpm dev
+```
 
-Production application code should follow the approved documentation baseline. If implementation intentionally deviates from an accepted decision, update or supersede the relevant ADR/specification first.
+Local services:
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:4000/health`
+- API readiness: `http://localhost:4000/ready`
+- PostgreSQL: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
+
+## Quality Gates
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm format:check
+pnpm docs:check
+```
+
+Production feature implementation must follow [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md) and the governing ADRs rather than framework defaults.
