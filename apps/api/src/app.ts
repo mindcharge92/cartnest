@@ -28,6 +28,16 @@ import { asInventoryAvailabilityBoundary } from "./modules/inventory/inventory.p
 import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { InventoryService } from "./modules/inventory/inventory.service.js";
+import { ShipmentAllocationStore } from "./modules/logistics/logistics.allocation.js";
+import { GiglAdapter } from "./modules/logistics/logistics.provider.js";
+import { BuyerLogisticsQueryService } from "./modules/logistics/logistics.query.js";
+import { PrismaLogisticsRepository } from "./modules/logistics/logistics.repository.js";
+import { registerLogisticsRoutes } from "./modules/logistics/logistics.routes.js";
+import {
+  LogisticsAwareCheckoutFinancialPolicy,
+  LogisticsService,
+} from "./modules/logistics/logistics.service.js";
+import { DatabaseOrderFulfillmentBoundary } from "./modules/orders/order.fulfillment.js";
 import { P6PrePaymentVendorAcceptancePolicy } from "./modules/orders/order.policy.js";
 import { PrismaOrderRepository } from "./modules/orders/order.repository.js";
 import { registerOrderRoutes } from "./modules/orders/order.routes.js";
@@ -113,6 +123,7 @@ export function buildApp(
         { name: "orders", description: "Buyer order history, detail, and cancellation" },
         { name: "vendor-orders", description: "Vendor-scoped order queue and processing boundary" },
         { name: "payments", description: "Provider-neutral payment initialization, verification, and webhooks" },
+        { name: "logistics", description: "Shipping quotes, fulfillment profiles, shipments, and tracking" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -174,15 +185,53 @@ export function buildApp(
       ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryBoundary)
       : undefined;
 
-  // P7 now resolves real commission configuration. Delivery, tax and promotions
-  // remain P8/P10 seams, so production checkout remains deliberately disabled
-  // until those phases replace their zero-value policies.
-  const orderService =
-    database && vendorBoundary && environment.nodeEnv !== "production"
-      ? new OrderService(
-          new PrismaOrderRepository(database),
+  const orderRepository = database ? new PrismaOrderRepository(database) : undefined;
+  const orderFulfillmentBoundary = database ? new DatabaseOrderFulfillmentBoundary(database) : undefined;
+  const logisticsRepository = database ? new PrismaLogisticsRepository(database) : undefined;
+  const logisticsAdapters = [];
+  if (environment.giglAccessToken && environment.giglCustomerCode) {
+    logisticsAdapters.push(
+      new GiglAdapter(environment.giglAccessToken, environment.giglCustomerCode, environment.giglBaseUrl),
+    );
+  }
+  const logisticsService =
+    database &&
+    logisticsRepository &&
+    vendorBoundary &&
+    orderFulfillmentBoundary &&
+    cartService &&
+    catalogBoundary
+      ? new LogisticsService(
+          logisticsRepository,
+          new ShipmentAllocationStore(database),
           vendorBoundary,
-          new DatabaseCheckoutFinancialPolicy(database, true),
+          orderFulfillmentBoundary,
+          cartService,
+          catalogBoundary,
+          logisticsAdapters,
+        )
+      : undefined;
+  const buyerLogisticsQueryService =
+    logisticsRepository && orderFulfillmentBoundary
+      ? new BuyerLogisticsQueryService(logisticsRepository, orderFulfillmentBoundary)
+      : undefined;
+
+  // P8 now replaces the zero-delivery checkout seam with persisted, expiring
+  // per-store shipping quotes. Tax and promotions remain P10 seams, so
+  // production checkout stays disabled until those policies are configured.
+  const baseFinancialPolicy = database
+    ? new DatabaseCheckoutFinancialPolicy(database, true)
+    : undefined;
+  const checkoutFinancialPolicy =
+    baseFinancialPolicy && logisticsService
+      ? new LogisticsAwareCheckoutFinancialPolicy(baseFinancialPolicy, logisticsService)
+      : undefined;
+  const orderService =
+    orderRepository && vendorBoundary && checkoutFinancialPolicy && environment.nodeEnv !== "production"
+      ? new OrderService(
+          orderRepository,
+          vendorBoundary,
+          checkoutFinancialPolicy,
           new P6PrePaymentVendorAcceptancePolicy(),
         )
       : undefined;
@@ -216,6 +265,11 @@ export function buildApp(
   registerCartRoutes(app, { service: cartService, authService });
   registerOrderRoutes(app, { service: orderService, authService });
   registerPaymentRoutes(app, { service: paymentService, authService });
+  registerLogisticsRoutes(app, {
+    service: logisticsService,
+    buyerQueryService: buyerLogisticsQueryService,
+    authService,
+  });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
