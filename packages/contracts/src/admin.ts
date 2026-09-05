@@ -55,9 +55,7 @@ export const CreateTaxRateBodySchema = Type.Object({
 }, { additionalProperties: false });
 export type CreateTaxRateBodyDto = Static<typeof CreateTaxRateBodySchema>;
 
-export const UpdateTaxRateBodySchema = Type.Object({
-  active: Type.Boolean(),
-}, { additionalProperties: false });
+export const UpdateTaxRateBodySchema = Type.Object({ active: Type.Boolean() }, { additionalProperties: false });
 export type UpdateTaxRateBodyDto = Static<typeof UpdateTaxRateBodySchema>;
 
 export const TaxRateListResponseSchema = Type.Object({ items: Type.Array(TaxRateSchema) }, { additionalProperties: false });
@@ -96,9 +94,7 @@ export const CreatePromotionBodySchema = Type.Object({
 }, { additionalProperties: false });
 export type CreatePromotionBodyDto = Static<typeof CreatePromotionBodySchema>;
 
-export const UpdatePromotionStatusBodySchema = Type.Object({
-  status: PromotionStatusSchema,
-}, { additionalProperties: false });
+export const UpdatePromotionStatusBodySchema = Type.Object({ status: PromotionStatusSchema }, { additionalProperties: false });
 export type UpdatePromotionStatusBodyDto = Static<typeof UpdatePromotionStatusBodySchema>;
 
 export const PromotionListResponseSchema = Type.Object({ items: Type.Array(PromotionSchema) }, { additionalProperties: false });
@@ -226,6 +222,37 @@ export const UpdateNotificationPreferenceBodySchema = Type.Object({
   enabled: Type.Boolean(),
 }, { additionalProperties: false });
 export type UpdateNotificationPreferenceBodyDto = Static<typeof UpdateNotificationPreferenceBodySchema>;
+
+export const OperationalNotificationSchema = Type.Object({
+  id: UuidSchema,
+  userId: Type.Union([UuidSchema, Type.Null()]),
+  channel: NotificationChannelSchema,
+  templateKey: Type.String(),
+  recipient: Type.String(),
+  status: NotificationStatusSchema,
+  provider: Type.Union([Type.String(), Type.Null()]),
+  providerRef: Type.Union([Type.String(), Type.Null()]),
+  attempts: Type.Integer({ minimum: 0 }),
+  nextAttemptAt: Type.Union([IsoTimestampSchema, Type.Null()]),
+  lastError: Type.Union([Type.String(), Type.Null()]),
+  createdAt: IsoTimestampSchema,
+  updatedAt: IsoTimestampSchema,
+}, { additionalProperties: false });
+export type OperationalNotificationDto = Static<typeof OperationalNotificationSchema>;
+
+export const OperationalNotificationQuerySchema = Type.Object({
+  page: Type.Optional(Type.Integer({ minimum: 1, default: 1 })),
+  pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  status: Type.Optional(NotificationStatusSchema),
+  channel: Type.Optional(NotificationChannelSchema),
+}, { additionalProperties: false });
+export type OperationalNotificationQueryDto = Static<typeof OperationalNotificationQuerySchema>;
+
+export const OperationalNotificationListResponseSchema = Type.Object({
+  items: Type.Array(OperationalNotificationSchema),
+  pagination: PaginationMetaSchema,
+}, { additionalProperties: false });
+export type OperationalNotificationListResponseDto = Static<typeof OperationalNotificationListResponseSchema>;
 
 export const TaxRateIdParamsSchema = Type.Object({ taxRateId: UuidSchema }, { additionalProperties: false });
 export const PromotionIdParamsSchema = Type.Object({ promotionId: UuidSchema }, { additionalProperties: false });
