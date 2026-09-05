@@ -2,7 +2,9 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current phase:** P0 — Repository and Tooling Foundation. The P0 scaffold is implemented; automated exit-gate verification is currently blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. See [`docs/implementation/p0-status.md`](docs/implementation/p0-status.md).
+**Current backend phase:** P6 — Checkout, Inventory Reservation, and Multi-Vendor Orders. Backend/domain source baselines for P0–P6 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P6 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation.
+
+See [`docs/implementation/p6-status.md`](docs/implementation/p6-status.md) for the current phase record.
 
 ## Approved Stack
 
@@ -50,7 +52,19 @@ Start with [`docs/README.md`](docs/README.md).
 
 The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
 
-## P0 Local Setup
+Implementation records currently exist for:
+
+```text
+P0 Repository/tooling foundation
+P1 Database + contracts foundation
+P2 Identity/auth/session/authorization
+P3 Vendor/store/KYC/membership
+P4 Catalog/variants/media
+P5 Inventory/wishlist/cart
+P6 Checkout/reservations/multi-vendor orders
+```
+
+## Local Setup
 
 ```bash
 corepack enable
