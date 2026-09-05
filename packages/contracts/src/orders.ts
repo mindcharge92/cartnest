@@ -55,7 +55,10 @@ export const DeliveryAddressSnapshotSchema = Type.Object(
 export type DeliveryAddressSnapshotDto = Static<typeof DeliveryAddressSnapshotSchema>;
 
 export const CheckoutBodySchema = Type.Object(
-  { deliveryAddress: DeliveryAddressSnapshotSchema },
+  {
+    deliveryAddress: DeliveryAddressSnapshotSchema,
+    promotionCode: Type.Optional(Type.String({ minLength: 2, maxLength: 64, pattern: "^[A-Za-z0-9_-]+$" })),
+  },
   { additionalProperties: false },
 );
 export type CheckoutBodyDto = Static<typeof CheckoutBodySchema>;
