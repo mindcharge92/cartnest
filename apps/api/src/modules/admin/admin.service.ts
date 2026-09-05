@@ -48,6 +48,10 @@ function pagination(page: number, pageSize: number, totalItems: number) {
   };
 }
 
+function isNotFound(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "P2025");
+}
+
 function mapTaxRate(record: {
   id: string; name: string; rateBps: number; active: boolean; startsAt: Date; endsAt: Date | null; createdAt: Date; updatedAt: Date;
 }): TaxRateDto {
@@ -147,7 +151,14 @@ export class AdminService {
         commissionAmountMinor: true,
         gatewayFeeAmountMinor: true,
       } }),
-      this.database.refund.aggregate({ where: { vendorOrder: { storeId }, status: "SUCCEEDED", ...(Object.keys(createdAt).length ? { createdAt } : {}) }, _sum: { amountMinor: true } }),
+      this.database.refund.aggregate({
+        where: {
+          vendorOrder: { is: { storeId } },
+          status: "SUCCEEDED",
+          ...(Object.keys(createdAt).length ? { createdAt } : {}),
+        },
+        _sum: { amountMinor: true },
+      }),
     ]);
     return {
       storeId,
@@ -228,13 +239,18 @@ export class AdminService {
 
   async setTaxRateActive(principal: AccessPrincipal, taxRateId: string, active: boolean): Promise<TaxRateDto> {
     this.requireAdmin(principal);
-    const record = await this.database.$transaction(async (tx) => {
-      if (active) await tx.taxRate.updateMany({ where: { active: true, id: { not: taxRateId } }, data: { active: false } });
-      const changed = await tx.taxRate.update({ where: { id: taxRateId }, data: { active } });
-      await writeAuditEntry(tx, { actorType: "USER", actorUserId: principal.userId, action: "admin.tax_rate.status_changed", entityType: "TaxRate", entityId: taxRateId, metadata: { active } });
-      return changed;
-    });
-    return mapTaxRate(record);
+    try {
+      const record = await this.database.$transaction(async (tx) => {
+        if (active) await tx.taxRate.updateMany({ where: { active: true, id: { not: taxRateId } }, data: { active: false } });
+        const changed = await tx.taxRate.update({ where: { id: taxRateId }, data: { active } });
+        await writeAuditEntry(tx, { actorType: "USER", actorUserId: principal.userId, action: "admin.tax_rate.status_changed", entityType: "TaxRate", entityId: taxRateId, metadata: { active } });
+        return changed;
+      });
+      return mapTaxRate(record);
+    } catch (error) {
+      if (isNotFound(error)) throw new AdminError("TAX_RATE_NOT_FOUND", "Tax rate was not found.", 404);
+      throw error;
+    }
   }
 
   async listPromotions(principal: AccessPrincipal): Promise<{ items: PromotionDto[] }> {
@@ -272,11 +288,16 @@ export class AdminService {
 
   async setPromotionStatus(principal: AccessPrincipal, promotionId: string, status: PromotionDto["status"]): Promise<PromotionDto> {
     this.requireAdmin(principal);
-    const record = await this.database.$transaction(async (tx) => {
-      const changed = await tx.promotion.update({ where: { id: promotionId }, data: { status } });
-      await writeAuditEntry(tx, { actorType: "USER", actorUserId: principal.userId, action: "admin.promotion.status_changed", entityType: "Promotion", entityId: promotionId, metadata: { status } });
-      return changed;
-    });
-    return mapPromotion(record);
+    try {
+      const record = await this.database.$transaction(async (tx) => {
+        const changed = await tx.promotion.update({ where: { id: promotionId }, data: { status } });
+        await writeAuditEntry(tx, { actorType: "USER", actorUserId: principal.userId, action: "admin.promotion.status_changed", entityType: "Promotion", entityId: promotionId, metadata: { status } });
+        return changed;
+      });
+      return mapPromotion(record);
+    } catch (error) {
+      if (isNotFound(error)) throw new AdminError("PROMOTION_NOT_FOUND", "Promotion was not found.", 404);
+      throw error;
+    }
   }
 }
