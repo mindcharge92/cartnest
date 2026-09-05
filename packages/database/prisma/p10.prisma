@@ -1,0 +1,22 @@
+model NotificationReceipt {
+  id             String   @id @default(uuid()) @db.Uuid
+  notificationId String   @unique @db.Uuid
+  userId         String   @db.Uuid
+  readAt         DateTime @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  channel   NotificationChannel
+  scopeKey  String              @default("*")
+  enabled   Boolean             @default(true)
+  createdAt DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, channel, scopeKey])
+  @@index([userId, enabled])
+}
