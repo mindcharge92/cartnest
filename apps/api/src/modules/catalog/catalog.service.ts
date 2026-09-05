@@ -124,6 +124,7 @@ function toPublicMedia(record: MediaRecord, storage?: MediaStorage): PublicMedia
 function toVendorProduct(record: ProductRecord, storage?: MediaStorage): VendorProductDto {
   return {
     id: record.id,
+    vendorId: record.store.vendorId,
     storeId: record.storeId,
     category: record.category ? toCategory(record.category) : null,
     name: record.name,
@@ -484,16 +485,8 @@ export class CatalogService {
         throw new CatalogError("PRODUCT_SLUG_TAKEN", "That product slug is already used by this store.", 409);
       }
     }
-    let updated = await this.repository.updateProduct(productId, input);
+    const updated = await this.repository.updateProduct(productId, input);
     if (!updated) throw new CatalogError("PRODUCT_NOT_FOUND", "Product was not found.", 404);
-
-    // Products that have entered the moderation workflow must not keep a prior
-    // approval after vendor-editable content changes. Normal NOT_REQUIRED
-    // products continue to publish immediately under the accepted policy.
-    if (existing.moderationStatus !== "NOT_REQUIRED") {
-      const requeued = await this.repository.setModerationStatus(productId, "PENDING");
-      if (requeued) updated = requeued;
-    }
 
     await this.audit(principal, "catalog.product.updated", "Product", productId, requestId, {
       moderationRequeued: existing.moderationStatus !== "NOT_REQUIRED",
@@ -753,13 +746,6 @@ export class CatalogService {
     throw new CatalogError("MEDIA_OWNER_INVALID", "Media does not have a valid owner.", 409);
   }
 
-  private async requeueModeratedProduct(productId: string | null): Promise<void> {
-    if (!productId) return;
-    const product = await this.repository.findProduct(productId);
-    if (!product || product.moderationStatus === "NOT_REQUIRED") return;
-    await this.repository.setModerationStatus(productId, "PENDING");
-  }
-
   async completeMediaUpload(
     principal: AccessPrincipal,
     mediaId: string,
@@ -786,7 +772,6 @@ export class CatalogService {
     }
     const completed = await this.repository.completeMedia(mediaId, input);
     if (!completed) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
-    await this.requeueModeratedProduct(media.productId);
     await this.audit(principal, "catalog.media.activated", "Media", mediaId, requestId);
     return toVendorMedia(completed, storage);
   }
@@ -826,9 +811,6 @@ export class CatalogService {
       media.status === "DELETED" ? media : await this.repository.deleteMedia(mediaId, new Date());
     if (!deleted) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
 
-    // The database lifecycle state is made non-public first. If R2 deletion is
-    // temporarily unavailable the endpoint can be retried safely; R2 DELETE is
-    // idempotent and the record remains DELETED in the meantime.
     try {
       await storage.deleteObject(media.objectKey);
     } catch {
@@ -839,7 +821,6 @@ export class CatalogService {
       );
     }
 
-    await this.requeueModeratedProduct(media.productId);
     await this.audit(principal, "catalog.media.deleted", "Media", mediaId, requestId);
     return toVendorMedia(deleted, storage);
   }
