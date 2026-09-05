@@ -12,6 +12,7 @@ import {
 } from "@repo/contracts";
 import type { DatabaseClient } from "@repo/database";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
+import rawBodyPlugin from "fastify-raw-body";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
@@ -27,13 +28,16 @@ import { asInventoryAvailabilityBoundary } from "./modules/inventory/inventory.p
 import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { InventoryService } from "./modules/inventory/inventory.service.js";
-import {
-  P6BaselineCheckoutFinancialPolicy,
-  P6PrePaymentVendorAcceptancePolicy,
-} from "./modules/orders/order.policy.js";
+import { P6PrePaymentVendorAcceptancePolicy } from "./modules/orders/order.policy.js";
 import { PrismaOrderRepository } from "./modules/orders/order.repository.js";
 import { registerOrderRoutes } from "./modules/orders/order.routes.js";
 import { OrderService } from "./modules/orders/order.service.js";
+import { FlutterwaveAdapter } from "./modules/payments/flutterwave.adapter.js";
+import { DatabaseCheckoutFinancialPolicy } from "./modules/payments/payment.policy.js";
+import { PrismaPaymentRepository } from "./modules/payments/payment.repository.js";
+import { registerPaymentRoutes } from "./modules/payments/payment.routes.js";
+import { PaymentService } from "./modules/payments/payment.service.js";
+import { PaystackAdapter } from "./modules/payments/paystack.adapter.js";
 import { asVendorOwnershipBoundary } from "./modules/vendors/vendor.public.js";
 import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
 import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
@@ -82,6 +86,12 @@ export function buildApp(
   });
 
   registerSecurityPlugins(app, environment);
+  void app.register(rawBodyPlugin, {
+    field: "rawBody",
+    global: false,
+    encoding: false,
+    runFirst: true,
+  });
 
   void app.register(swagger, {
     openapi: {
@@ -102,6 +112,7 @@ export function buildApp(
         { name: "checkout", description: "Idempotent checkout and inventory reservation" },
         { name: "orders", description: "Buyer order history, detail, and cancellation" },
         { name: "vendor-orders", description: "Vendor-scoped order queue and processing boundary" },
+        { name: "payments", description: "Provider-neutral payment initialization, verification, and webhooks" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -163,18 +174,39 @@ export function buildApp(
       ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryBoundary)
       : undefined;
 
-  // P6's financial hook intentionally returns zero commission/tax/delivery while
-  // the transaction shape is being established. Do not expose that baseline to
-  // real production commerce; P7/P8/P10 must supply the configured policies first.
+  // P7 now resolves real commission configuration. Delivery, tax and promotions
+  // remain P8/P10 seams, so production checkout remains deliberately disabled
+  // until those phases replace their zero-value policies.
   const orderService =
     database && vendorBoundary && environment.nodeEnv !== "production"
       ? new OrderService(
           new PrismaOrderRepository(database),
           vendorBoundary,
-          new P6BaselineCheckoutFinancialPolicy(),
+          new DatabaseCheckoutFinancialPolicy(database, true),
           new P6PrePaymentVendorAcceptancePolicy(),
         )
       : undefined;
+
+  const paymentAdapters = [];
+  if (environment.paystackSecretKey) {
+    paymentAdapters.push(new PaystackAdapter(environment.paystackSecretKey, environment.paystackBaseUrl));
+  }
+  if (environment.flutterwaveSecretKey && environment.flutterwaveSecretHash) {
+    paymentAdapters.push(
+      new FlutterwaveAdapter(
+        environment.flutterwaveSecretKey,
+        environment.flutterwaveSecretHash,
+        environment.flutterwaveBaseUrl,
+      ),
+    );
+  }
+  const paymentService = database
+    ? new PaymentService(
+        new PrismaPaymentRepository(database),
+        paymentAdapters,
+        environment.paymentCallbackUrl,
+      )
+    : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
@@ -183,6 +215,7 @@ export function buildApp(
   registerWishlistRoutes(app, { service: wishlistService, authService });
   registerCartRoutes(app, { service: cartService, authService });
   registerOrderRoutes(app, { service: orderService, authService });
+  registerPaymentRoutes(app, { service: paymentService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
