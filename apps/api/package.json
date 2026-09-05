@@ -25,6 +25,7 @@
     "@repo/contracts": "workspace:*",
     "@repo/database": "workspace:*",
     "fastify": "5.12.1",
+    "fastify-raw-body": "6.0.1",
     "jose": "6.2.11",
     "openid-client": "6.8.7",
     "redis": "6.2.1",
