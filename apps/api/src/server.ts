@@ -1,7 +1,7 @@
 import { getApiEnvironment } from "@repo/config/api";
 import { createDatabaseClient, isDatabaseReady } from "@repo/database";
 import { createClient } from "redis";
-import { buildApp } from "./app.js";
+import { buildHardenedApp } from "./app.hardened.js";
 
 const environment = getApiEnvironment();
 const database = environment.databaseUrl
@@ -26,7 +26,7 @@ async function redisReady(): Promise<boolean> {
   }
 }
 
-const app = buildApp(
+const app = buildHardenedApp(
   {},
   {
     database: async () => (database ? isDatabaseReady(database) : false),
@@ -36,7 +36,7 @@ const app = buildApp(
 );
 
 redis?.on("error", (error) => {
-  app.log.warn({ err: error }, "Redis connectivity error");
+  app.log.warn({ errorName: error.name }, "Redis connectivity error");
 });
 
 async function closeDependencies() {
@@ -64,7 +64,7 @@ async function start() {
   try {
     await app.listen({ host: environment.host, port: environment.port });
   } catch (error) {
-    app.log.error(error);
+    app.log.error({ errorName: error instanceof Error ? error.name : "UnknownError" }, "API startup failed");
     await closeDependencies();
     process.exitCode = 1;
   }
