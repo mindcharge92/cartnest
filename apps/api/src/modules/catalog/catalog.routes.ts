@@ -419,6 +419,33 @@ export function registerCatalogRoutes(app: FastifyInstance, options: CatalogRout
     },
   );
 
+  server.delete(
+    "/api/v1/media/:mediaId",
+    {
+      schema: {
+        tags: ["media"],
+        operationId: "deleteMedia",
+        params: MediaIdParamsSchema,
+        response: { 200: VendorMediaSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      try {
+        requireCsrfToken(request);
+        const service = serviceOrThrow(options.service);
+        return reply.send(
+          await service.deleteMedia(
+            await principal(request, options),
+            request.params.mediaId,
+            request.id,
+          ),
+        );
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    },
+  );
+
   server.get(
     "/api/v1/admin/categories",
     {
