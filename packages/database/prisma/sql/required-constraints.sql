@@ -13,7 +13,11 @@ ALTER TABLE "Media"
 ALTER TABLE "InventoryItem"
   ADD CONSTRAINT "InventoryItem_onHand_nonnegative" CHECK ("onHand" >= 0),
   ADD CONSTRAINT "InventoryItem_reserved_nonnegative" CHECK ("reserved" >= 0),
-  ADD CONSTRAINT "InventoryItem_reserved_lte_onHand" CHECK ("reserved" <= "onHand");
+  ADD CONSTRAINT "InventoryItem_reserved_lte_onHand" CHECK ("reserved" <= "onHand"),
+  ADD CONSTRAINT "InventoryItem_version_nonnegative" CHECK ("version" >= 0);
+
+ALTER TABLE "InventoryAdjustment"
+  ADD CONSTRAINT "InventoryAdjustment_delta_nonzero" CHECK ("delta" <> 0);
 
 CREATE UNIQUE INDEX "Cart_one_active_per_user"
   ON "Cart" ("userId")
