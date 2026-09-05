@@ -1,4 +1,4 @@
-import type { CategoryDto, MoneyDto } from "@repo/contracts";
+import type { CategoryDto, MoneyDto, ProductVariantDto } from "@repo/contracts";
 
 export interface ProductOptionDraft {
   readonly name: string;
@@ -69,6 +69,47 @@ export function buildVariantCombinations(options: readonly ProductOptionDraft[])
     key: selections.map((selection) => `${selection.optionName}=${selection.value}`).join("|"),
     selections,
   }));
+}
+
+export function variantSelection(variant: ProductVariantDto): Record<string, string> {
+  return Object.fromEntries(
+    variant.optionValues.map((selection) => [selection.optionId, selection.valueId]),
+  );
+}
+
+export function variantMatchesSelection(
+  variant: ProductVariantDto,
+  selected: Readonly<Record<string, string>>,
+): boolean {
+  const selectedEntries = Object.entries(selected).filter(([, value]) => Boolean(value));
+  if (selectedEntries.length === 0) return variant.optionValues.length === 0;
+  return variant.optionValues.length === selectedEntries.length &&
+    variant.optionValues.every((selection) => selected[selection.optionId] === selection.valueId);
+}
+
+export function bestVariantForOptionValue(
+  variants: readonly ProductVariantDto[],
+  optionId: string,
+  valueId: string,
+  selected: Readonly<Record<string, string>>,
+): ProductVariantDto | null {
+  let best: { variant: ProductVariantDto; score: number } | null = null;
+
+  for (const variant of variants) {
+    const containsValue = variant.optionValues.some(
+      (selection) => selection.optionId === optionId && selection.valueId === valueId,
+    );
+    if (!containsValue) continue;
+
+    const score = variant.optionValues.reduce((matches, selection) => {
+      if (selection.optionId === optionId) return matches;
+      return selected[selection.optionId] === selection.valueId ? matches + 1 : matches;
+    }, 0);
+
+    if (!best || score > best.score) best = { variant, score };
+  }
+
+  return best?.variant ?? null;
 }
 
 export function categoryLabels(categories: readonly CategoryDto[]): Map<string, string> {
