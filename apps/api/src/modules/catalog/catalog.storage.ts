@@ -1,4 +1,10 @@
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export interface MediaObjectMetadata {
@@ -17,6 +23,8 @@ export interface MediaStorage {
   readonly bucket: string;
   createUploadAuthorization(objectKey: string, mimeType: string): Promise<MediaUploadAuthorization>;
   headObject(objectKey: string): Promise<MediaObjectMetadata | null>;
+  readObjectPrefix(objectKey: string, byteCount: number): Promise<Uint8Array>;
+  deleteObject(objectKey: string): Promise<void>;
   publicUrl(objectKey: string): string;
 }
 
@@ -87,6 +95,25 @@ export class R2MediaStorage implements MediaStorage {
       if (status === 404) return null;
       throw error;
     }
+  }
+
+  async readObjectPrefix(objectKey: string, byteCount: number): Promise<Uint8Array> {
+    if (!Number.isInteger(byteCount) || byteCount < 1 || byteCount > 4096) {
+      throw new Error("Media prefix byte count must be between 1 and 4096.");
+    }
+    const result = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Range: `bytes=0-${byteCount - 1}`,
+      }),
+    );
+    if (!result.Body) return new Uint8Array();
+    return result.Body.transformToByteArray();
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }));
   }
 
   publicUrl(objectKey: string): string {
