@@ -1,0 +1,18 @@
+FROM node:24.20.0-bookworm-slim
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV NODE_ENV=production
+
+RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
+
+WORKDIR /workspace
+COPY . .
+
+RUN pnpm install --frozen-lockfile \
+  && pnpm --filter @repo/database db:generate \
+  && pnpm build
+
+EXPOSE 4000
+
+CMD ["pnpm", "--filter", "@cartnest/api", "start"]
