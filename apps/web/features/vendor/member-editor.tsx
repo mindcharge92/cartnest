@@ -38,7 +38,10 @@ export function MemberEditor({
   const isSelf = member.user.id === access.membership.userId;
   const isPendingInvitation = member.status === "INVITED";
   const actorCanUpdate = hasVendorPermission(access, "staff:update") && !isSelf;
-  const actorCanRemove = hasVendorPermission(access, "staff:remove") && !isSelf;
+  const actorCanRemove =
+    hasVendorPermission(access, "staff:remove") &&
+    !isSelf &&
+    (actorIsOwner || member.role !== "OWNER");
   const actorCanChangeRole = actorCanUpdate && actorIsOwner && !isPendingInvitation;
   const actorCanChangeStatus = actorCanUpdate && !isPendingInvitation && (actorIsOwner || member.role !== "OWNER");
   const actorCanDelegateCurrentSet =
