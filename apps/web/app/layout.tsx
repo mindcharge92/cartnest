@@ -7,6 +7,7 @@ import "./vendor.css";
 import "./catalog.css";
 import "./commerce.css";
 import "./orders.css";
+import "./orders-payments.css";
 import "./navigation.css";
 
 export const metadata: Metadata = {
