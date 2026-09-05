@@ -2,9 +2,9 @@
 
 CartNest is a multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP5**.
+**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP6**.
 
-The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, public catalog/product/variant/media integration, authenticated wishlist and multi-store cart flows, checkout-readiness preview, and vendor inventory management with optimistic concurrency handling.
+The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, public catalog/product/variant/media integration, authenticated wishlist and multi-store cart flows, vendor inventory management, delivery-aware checkout, idempotent parent-order creation, buyer order history/detail, and vendor order queues with payment-state-aware cancellation controls.
 
 See:
 
@@ -13,8 +13,9 @@ See:
 - [`docs/implementation/frontend-p3-status.md`](docs/implementation/frontend-p3-status.md)
 - [`docs/implementation/frontend-p4-status.md`](docs/implementation/frontend-p4-status.md)
 - [`docs/implementation/frontend-p5-status.md`](docs/implementation/frontend-p5-status.md)
+- [`docs/implementation/frontend-p6-status.md`](docs/implementation/frontend-p6-status.md)
 
-The next frontend phase is **FP6 — checkout, reservations, and buyer/vendor order integration**.
+The next frontend phase is **FP7 — payment initialization, provider handoff, and payment-state UX**.
 
 ## Approved Stack
 
@@ -68,8 +69,8 @@ FP2  Identity / sessions / verification / MFA               ✅ source baseline
 FP3  Vendor onboarding / stores / KYC / staff               ✅ source baseline
 FP4  Marketplace catalog / products / media                 ✅ source baseline
 FP5  Inventory / wishlist / cart                            ✅ source baseline
-FP6  Checkout / reservations / orders                       NEXT
-FP7  Payments
+FP6  Checkout / reservations / orders                       ✅ source baseline
+FP7  Payments                                               NEXT
 FP8  Logistics / tracking
 FP9  Returns / refunds / reviews
 FP10 Admin / analytics / promotions / notifications
@@ -77,7 +78,7 @@ FP11 Privacy / accessibility / security / performance
 FP12 End-to-end integration / UAT
 ```
 
-Source-baseline status does not mean CI/runtime validation has passed. GitHub Actions is still failing before any job is scheduled, so install/lint/typecheck/test/build and browser/staging evidence remain pending.
+Source-baseline status does not mean CI/runtime validation has passed. GitHub Actions has been failing before repository jobs are scheduled, so install/lint/typecheck/test/build and browser/staging evidence remain pending until a trusted execution run exists.
 
 ## Local Setup
 
