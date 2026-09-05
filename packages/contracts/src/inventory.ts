@@ -1,5 +1,6 @@
 import { Type, type Static } from "typebox";
 import { IsoTimestampSchema, UuidSchema } from "./common.js";
+import { VariantOptionSelectionSchema } from "./catalog.js";
 
 export const InventoryItemSchema = Type.Object(
   {
@@ -8,6 +9,7 @@ export const InventoryItemSchema = Type.Object(
     storeId: UuidSchema,
     productName: Type.String({ minLength: 1, maxLength: 200 }),
     sku: Type.String({ minLength: 1, maxLength: 100 }),
+    optionValues: Type.Array(VariantOptionSelectionSchema),
     onHand: Type.Integer({ minimum: 0 }),
     reserved: Type.Integer({ minimum: 0 }),
     available: Type.Integer({ minimum: 0 }),
