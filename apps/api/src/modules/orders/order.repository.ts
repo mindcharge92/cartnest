@@ -162,6 +162,31 @@ export function isOpenUnpaidOrder(status: string, paymentStatus: string): boolea
   );
 }
 
+async function lockOrderRow(transaction: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+  const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "Order"
+    WHERE "id" = ${orderId}::uuid
+    FOR UPDATE
+  `);
+  return rows.length === 1;
+}
+
+async function hasActivePaymentAttempt(
+  transaction: Prisma.TransactionClient,
+  orderId: string,
+): Promise<boolean> {
+  return Boolean(
+    await transaction.paymentAttempt.findFirst({
+      where: {
+        paymentIntent: { orderId },
+        status: { in: ["PENDING", "REQUIRES_ACTION", "PROCESSING", "SUCCEEDED"] },
+      },
+      select: { id: true },
+    }),
+  );
+}
+
 function checkoutLine(row: CheckoutCartRecord["items"][number]): CheckoutDraftLine {
   const variant = row.variant;
   const product = variant.product;
@@ -635,6 +660,7 @@ export class PrismaOrderRepository implements OrderRepository {
     now: Date;
   }): Promise<OrderRecord | null> {
     const changed = await this.database.$transaction(async (transaction) => {
+      if (!(await lockOrderRow(transaction, input.orderId))) return false;
       const order = await transaction.order.findFirst({
         where: { id: input.orderId, userId: input.userId },
         include: { paymentIntents: true },
@@ -643,6 +669,10 @@ export class PrismaOrderRepository implements OrderRepository {
       if (!isOpenUnpaidOrder(order.status, order.paymentStatus)) {
         throw new Error("ORDER_NOT_CANCELLABLE");
       }
+      if (await hasActivePaymentAttempt(transaction, order.id)) {
+        throw new Error("ORDER_PAYMENT_ACTIVE");
+      }
+
       await this.releaseHeldReservations(transaction, order.id, input.now, "RELEASED");
       await transaction.vendorOrder.updateMany({
         where: { orderId: order.id, status: { in: ["PENDING", "ACCEPTED"] } },
@@ -711,6 +741,13 @@ export class PrismaOrderRepository implements OrderRepository {
     now: Date;
   }): Promise<VendorOrderRecord | null> {
     const changed = await this.database.$transaction(async (transaction) => {
+      const identity = await transaction.vendorOrder.findUnique({
+        where: { id: input.vendorOrderId },
+        select: { orderId: true },
+      });
+      if (!identity) return false;
+      if (!(await lockOrderRow(transaction, identity.orderId))) return false;
+
       const vendorOrder = await transaction.vendorOrder.findUnique({
         where: { id: input.vendorOrderId },
         include: { order: true, items: true },
@@ -721,6 +758,9 @@ export class PrismaOrderRepository implements OrderRepository {
         !["PENDING", "ACCEPTED"].includes(vendorOrder.status)
       ) {
         throw new Error("VENDOR_ORDER_NOT_CANCELLABLE");
+      }
+      if (await hasActivePaymentAttempt(transaction, vendorOrder.orderId)) {
+        throw new Error("ORDER_PAYMENT_ACTIVE");
       }
 
       const variantIds = new Set(vendorOrder.items.map((item) => item.variantId));
@@ -822,8 +862,15 @@ export class PrismaOrderRepository implements OrderRepository {
     let expired = 0;
     for (const orderId of orderIds) {
       await this.database.$transaction(async (transaction) => {
+        if (!(await lockOrderRow(transaction, orderId))) return;
         const order = await transaction.order.findUnique({ where: { id: orderId } });
         if (!order || !isOpenUnpaidOrder(order.status, order.paymentStatus)) return;
+
+        // An unresolved provider attempt may still settle after the nominal
+        // reservation deadline. Keep inventory held until payment reconciliation
+        // reaches a terminal non-success state instead of releasing stock early.
+        if (await hasActivePaymentAttempt(transaction, orderId)) return;
+
         const before = await transaction.inventoryReservation.count({ where: { orderId, status: "HELD" } });
         await this.releaseHeldReservations(transaction, orderId, now, "EXPIRED");
         if (before === 0) return;
