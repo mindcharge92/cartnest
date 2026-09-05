@@ -21,13 +21,20 @@ const staff: VendorMembershipContext = {
   id: "44444444-4444-4444-8444-444444444444",
   userId: "55555555-5555-4555-8555-555555555555",
   role: "STAFF",
-  permissions: ["store:read", "order:read"],
+  permissions: ["store:read", "product:read", "order:read"],
 };
 
 describe("vendor authorization", () => {
   it("treats an active owner as having all vendor permissions", () => {
     expect(() => requireVendorPermission(owner, "staff:remove")).not.toThrow();
     expect(effectiveVendorPermissions(owner)).toContain("inventory:adjust");
+    expect(effectiveVendorPermissions(owner)).toContain("product:read");
+  });
+
+  it("allows product viewing without granting product mutation", () => {
+    expect(() => requireVendorPermission(staff, "product:read")).not.toThrow();
+    expect(() => requireVendorPermission(staff, "product:update")).toThrow();
+    expect(() => requireVendorPermission(staff, "product:archive")).toThrow();
   });
 
   it("allows staff only for explicitly granted permissions", () => {
