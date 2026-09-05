@@ -2,9 +2,9 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current backend phase:** P6 — Checkout, Inventory Reservation, and Multi-Vendor Orders. Backend/domain source baselines for P0–P6 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P6 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation.
+**Current backend phase:** P7 — Payments, Commission, Gateway Fees, Webhooks, and Reconciliation. Backend/domain source baselines for P0–P7 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P7 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
 
-See [`docs/implementation/p6-status.md`](docs/implementation/p6-status.md) for the current phase record.
+See [`docs/implementation/p7-status.md`](docs/implementation/p7-status.md) for the current phase record.
 
 ## Approved Stack
 
@@ -62,6 +62,7 @@ P3 Vendor/store/KYC/membership
 P4 Catalog/variants/media
 P5 Inventory/wishlist/cart
 P6 Checkout/reservations/multi-vendor orders
+P7 Payments/commission/webhooks/reconciliation
 ```
 
 ## Local Setup
