@@ -112,6 +112,10 @@ function providerPayload(rawBody: Buffer): Prisma.InputJsonValue {
   }
 }
 
+function repositorySignal(error: unknown, signal: string): boolean {
+  return error instanceof Error && error.message.includes(signal);
+}
+
 export class PaymentService {
   private readonly adapters: ReadonlyMap<PaymentProviderDto, PaymentProviderAdapter>;
 
@@ -303,12 +307,44 @@ export class PaymentService {
       }
       provider = fallbackProvider;
       const fallbackReference = paymentReference(fallbackProvider);
-      attempt = await this.repository.createFallbackAttempt({
-        paymentIntentId,
-        provider: fallbackProvider,
-        providerReference: fallbackReference,
-        ...(body.channel ? { channel: body.channel } : {}),
-      });
+      try {
+        attempt = await this.repository.createFallbackAttempt({
+          paymentIntentId,
+          provider: fallbackProvider,
+          providerReference: fallbackReference,
+          expectedAmountMinor: begin.intent.amountMinor,
+          expectedCurrency: begin.intent.currency,
+          ...(body.channel ? { channel: body.channel } : {}),
+        });
+      } catch (error) {
+        if (repositorySignal(error, "PAYMENT_RESERVATION_EXPIRED")) {
+          throw new PaymentError(
+            "PAYMENT_RESERVATION_EXPIRED",
+            "The checkout inventory reservation expired before fallback could safely start. Do not pay this order.",
+            409,
+          );
+        }
+        if (
+          repositorySignal(error, "PAYMENT_NOT_PAYABLE") ||
+          repositorySignal(error, "PAYMENT_AMOUNT_CHANGED") ||
+          repositorySignal(error, "ORDER_PAYMENT_STATE_CHANGED") ||
+          repositorySignal(error, "ORDER_PAYMENT_AMOUNT_CHANGED")
+        ) {
+          throw new PaymentError(
+            "PAYMENT_NOT_PAYABLE",
+            "The order changed before fallback could safely start. Refresh the order before taking another payment action.",
+            409,
+          );
+        }
+        if (repositorySignal(error, "ORDER_PAYMENT_ACTIVE")) {
+          throw new PaymentError(
+            "PAYMENT_ATTEMPT_ACTIVE",
+            "Another payment attempt became active. Reconcile it before creating another charge.",
+            409,
+          );
+        }
+        throw error;
+      }
       initialized = await this.callInitialize(provider, begin, attempt.id, fallbackReference, body);
     }
 
@@ -411,7 +447,7 @@ export class PaymentService {
     if (!intent) throw new PaymentError("PAYMENT_INTENT_NOT_FOUND", "Payment intent was not found.", 404);
     const attempt = [...intent.attempts]
       .reverse()
-      .find((item) => item.providerReference && ["REQUIRES_ACTION", "PROCESSING"].includes(item.status));
+      .find((item) => item.providerReference && ["PENDING", "REQUIRES_ACTION", "PROCESSING"].includes(item.status));
     if (!attempt?.providerReference) return mapIntent(intent);
     const context = await this.repository.findAttemptContext(attempt.provider, attempt.providerReference);
     const adapter = this.adapter(attempt.provider);
