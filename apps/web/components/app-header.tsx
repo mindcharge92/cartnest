@@ -8,6 +8,7 @@ export function AppHeader() {
   const pathname = usePathname();
   const { session, status, logout, reloadSession } = useSession();
   const marketplaceActive = pathname.startsWith("/marketplace") || pathname.startsWith("/products/");
+  const cartActive = pathname.startsWith("/cart") || pathname.startsWith("/checkout");
 
   return (
     <header className="siteHeader">
@@ -26,8 +27,11 @@ export function AppHeader() {
               <Link className="navLink commerceNavLink" aria-current={pathname.startsWith("/wishlist") ? "page" : undefined} href="/wishlist">
                 Saved
               </Link>
-              <Link className="navLink commerceNavLink" aria-current={pathname.startsWith("/cart") ? "page" : undefined} href="/cart">
+              <Link className="navLink commerceNavLink" aria-current={cartActive ? "page" : undefined} href="/cart">
                 Cart
+              </Link>
+              <Link className="navLink commerceNavLink" aria-current={pathname.startsWith("/orders") ? "page" : undefined} href="/orders">
+                Orders
               </Link>
               <Link className="navLink" aria-current={pathname.startsWith("/vendor") ? "page" : undefined} href="/vendor">
                 Seller
