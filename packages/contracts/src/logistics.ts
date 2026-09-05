@@ -36,6 +36,20 @@ export const FulfillmentProfileBodySchema = Type.Object({
 }, { additionalProperties: false });
 export type FulfillmentProfileBodyDto = Static<typeof FulfillmentProfileBodySchema>;
 
+export const FulfillmentProfileSchema = Type.Object({
+  id: UuidSchema,
+  storeId: UuidSchema,
+  defaultProvider: ShipmentProviderSchema,
+  manualDeliveryEnabled: Type.Boolean(),
+  manualDeliveryFee: Type.Union([MoneySchema, Type.Null()]),
+  originAddress: DeliveryAddressSnapshotSchema,
+  giglStationId: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  active: Type.Boolean(),
+  createdAt: IsoTimestampSchema,
+  updatedAt: IsoTimestampSchema,
+}, { additionalProperties: false });
+export type FulfillmentProfileDto = Static<typeof FulfillmentProfileSchema>;
+
 export const VariantShippingProfileBodySchema = Type.Object({
   weightGrams: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
   lengthMm: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -44,6 +58,19 @@ export const VariantShippingProfileBodySchema = Type.Object({
   pieces: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
 }, { additionalProperties: false });
 export type VariantShippingProfileBodyDto = Static<typeof VariantShippingProfileBodySchema>;
+
+export const VariantShippingProfileSchema = Type.Object({
+  id: UuidSchema,
+  variantId: UuidSchema,
+  weightGrams: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+  lengthMm: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  widthMm: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  heightMm: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  pieces: Type.Integer({ minimum: 1, maximum: 1000 }),
+  createdAt: IsoTimestampSchema,
+  updatedAt: IsoTimestampSchema,
+}, { additionalProperties: false });
+export type VariantShippingProfileDto = Static<typeof VariantShippingProfileSchema>;
 
 export const ShippingQuoteRequestSchema = Type.Object({
   deliveryAddress: DeliveryAddressSnapshotSchema,
@@ -68,9 +95,15 @@ export const ShippingQuoteGroupSchema = Type.Object({
 export const ShippingQuoteResponseSchema = Type.Object({ groups: Type.Array(ShippingQuoteGroupSchema) }, { additionalProperties: false });
 export type ShippingQuoteResponseDto = Static<typeof ShippingQuoteResponseSchema>;
 
+export const ShipmentItemAllocationSchema = Type.Object({
+  orderItemId: UuidSchema,
+  quantity: Type.Integer({ minimum: 1 }),
+}, { additionalProperties: false });
+export type ShipmentItemAllocationDto = Static<typeof ShipmentItemAllocationSchema>;
+
 export const CreateShipmentBodySchema = Type.Object({
   provider: ShipmentProviderSchema,
-  items: Type.Array(Type.Object({ orderItemId: UuidSchema, quantity: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }), { minItems: 1 }),
+  items: Type.Array(ShipmentItemAllocationSchema, { minItems: 1 }),
   trackingNumber: Type.Optional(Type.String({ minLength: 2, maxLength: 160 })),
   note: Type.Optional(Type.String({ maxLength: 500 })),
 }, { additionalProperties: false });
@@ -89,6 +122,7 @@ export const ShipmentEventSchema = Type.Object({
   location: Type.Union([Type.String({ maxLength: 240 }), Type.Null()]),
   eventTime: IsoTimestampSchema,
 }, { additionalProperties: false });
+export type ShipmentEventDto = Static<typeof ShipmentEventSchema>;
 
 export const ShipmentSchema = Type.Object({
   id: UuidSchema,
@@ -98,6 +132,7 @@ export const ShipmentSchema = Type.Object({
   trackingNumber: Type.Union([Type.String({ maxLength: 160 }), Type.Null()]),
   status: ShipmentStatusSchema,
   fee: Type.Union([MoneySchema, Type.Null()]),
+  items: Type.Array(ShipmentItemAllocationSchema),
   deliveredAt: Type.Union([IsoTimestampSchema, Type.Null()]),
   events: Type.Array(ShipmentEventSchema),
   createdAt: IsoTimestampSchema,
