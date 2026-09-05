@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   CreateShipmentBodyDto,
   FulfillmentProfileBodyDto,
+  LogisticsStationListResponseDto,
   ShipmentDto,
   ShippingQuoteRequestDto,
   ShippingQuoteResponseDto,
@@ -88,6 +89,30 @@ export class LogisticsService {
     adapters: readonly LogisticsProviderAdapter[],
   ) {
     for (const adapter of adapters) this.adapters.set(adapter.provider, adapter);
+  }
+
+  async listStations(): Promise<LogisticsStationListResponseDto> {
+    const adapter = this.adapters.get("GIGL");
+    if (!adapter?.getStations) {
+      throw new LogisticsError(
+        "GIGL_UNAVAILABLE",
+        "GIGL station lookup is not configured.",
+        503,
+      );
+    }
+    try {
+      const items = await adapter.getStations();
+      return {
+        provider: "GIGL",
+        items: items.map((station) => ({ id: station.id, name: station.name, state: station.state })),
+      };
+    } catch {
+      throw new LogisticsError(
+        "GIGL_STATIONS_UNAVAILABLE",
+        "GIGL receiver stations could not be loaded. Try again before requesting a GIGL quote.",
+        503,
+      );
+    }
   }
 
   async updateStoreProfile(
@@ -334,7 +359,7 @@ export class LogisticsService {
       vendorOrderId,
       provider: "MANUAL",
       ...(body.trackingNumber ? { trackingNumber: body.trackingNumber } : {}),
-      ...(body.note ? { metadata: { note: body.note } } : {}),
+      ...(body.note ? { metadata: { note: body.note } : {}),
       items: body.items,
       actorUserId: principal.userId,
       now: new Date(),
