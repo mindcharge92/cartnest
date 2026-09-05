@@ -225,4 +225,9 @@ export {
   type VendorProductListResponseDto,
 } from "./catalog.js";
 
+export {
+  CatalogProductDetailResponseSchema,
+  type CatalogProductDetailResponseDto,
+} from "./catalog-public-detail.js";
+
 export const CONTRACT_VERSION = 1 as const;
