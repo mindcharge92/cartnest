@@ -21,6 +21,16 @@ export const CartProductSummarySchema = Type.Object(
 );
 export type CartProductSummaryDto = Static<typeof CartProductSummarySchema>;
 
+export const CheckoutPreviewIssueCodeSchema = Type.Union([
+  Type.Literal("PRODUCT_UNAVAILABLE"),
+  Type.Literal("VARIANT_UNAVAILABLE"),
+  Type.Literal("STORE_UNAVAILABLE"),
+  Type.Literal("VENDOR_UNAVAILABLE"),
+  Type.Literal("INSUFFICIENT_STOCK"),
+  Type.Literal("PRICE_CHANGED"),
+]);
+export type CheckoutPreviewIssueCodeDto = Static<typeof CheckoutPreviewIssueCodeSchema>;
+
 export const CartItemSchema = Type.Object(
   {
     id: UuidSchema,
@@ -36,11 +46,30 @@ export const CartItemSchema = Type.Object(
 );
 export type CartItemDto = Static<typeof CartItemSchema>;
 
+export const CartUnavailableItemSchema = Type.Object(
+  {
+    id: UuidSchema,
+    variantId: UuidSchema,
+    quantity: Type.Integer({ minimum: 1 }),
+    productId: Type.Union([UuidSchema, Type.Null()]),
+    productName: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    storeId: Type.Union([UuidSchema, Type.Null()]),
+    sku: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+    issueCode: CheckoutPreviewIssueCodeSchema,
+    message: Type.String({ minLength: 1, maxLength: 500 }),
+    createdAt: IsoTimestampSchema,
+    updatedAt: IsoTimestampSchema,
+  },
+  { additionalProperties: false },
+);
+export type CartUnavailableItemDto = Static<typeof CartUnavailableItemSchema>;
+
 export const CartResponseSchema = Type.Object(
   {
     id: UuidSchema,
     status: CartStatusSchema,
     items: Type.Array(CartItemSchema),
+    unavailableItems: Type.Array(CartUnavailableItemSchema),
     itemCount: Type.Integer({ minimum: 0 }),
     distinctStoreCount: Type.Integer({ minimum: 0 }),
     subtotal: MoneySchema,
@@ -71,16 +100,6 @@ export const CartItemParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 export type CartItemParamsDto = Static<typeof CartItemParamsSchema>;
-
-export const CheckoutPreviewIssueCodeSchema = Type.Union([
-  Type.Literal("PRODUCT_UNAVAILABLE"),
-  Type.Literal("VARIANT_UNAVAILABLE"),
-  Type.Literal("STORE_UNAVAILABLE"),
-  Type.Literal("VENDOR_UNAVAILABLE"),
-  Type.Literal("INSUFFICIENT_STOCK"),
-  Type.Literal("PRICE_CHANGED"),
-]);
-export type CheckoutPreviewIssueCodeDto = Static<typeof CheckoutPreviewIssueCodeSchema>;
 
 export const CheckoutPreviewIssueSchema = Type.Object(
   {
