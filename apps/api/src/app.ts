@@ -15,6 +15,11 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
+import { PrismaCatalogRepository } from "./modules/catalog/catalog.repository.js";
+import { registerCatalogRoutes } from "./modules/catalog/catalog.routes.js";
+import { CatalogService } from "./modules/catalog/catalog.service.js";
+import { R2MediaStorage } from "./modules/catalog/catalog.storage.js";
+import { asVendorOwnershipBoundary } from "./modules/vendors/vendor.public.js";
 import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
 import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
 import { VendorService } from "./modules/vendors/vendor.service.js";
@@ -71,7 +76,9 @@ export function buildApp(
         { name: "system", description: "Platform health, readiness, and API metadata" },
         { name: "auth", description: "Identity, sessions, verification, OAuth, and MFA" },
         { name: "vendors", description: "Vendor applications, stores, staff, KYC, and settlement account visibility" },
-        { name: "admin", description: "Privileged marketplace administration and vendor review" },
+        { name: "catalog", description: "Categories, products, variants, search, and buyer catalog" },
+        { name: "media", description: "Direct object-storage upload intents and media metadata" },
+        { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
   });
@@ -90,8 +97,33 @@ export function buildApp(
     ? new VendorService(new PrismaVendorRepository(database))
     : undefined;
 
+  const mediaStorage =
+    environment.r2AccountId &&
+    environment.r2AccessKeyId &&
+    environment.r2SecretAccessKey &&
+    environment.r2Bucket &&
+    environment.r2PublicBaseUrl
+      ? new R2MediaStorage({
+          accountId: environment.r2AccountId,
+          accessKeyId: environment.r2AccessKeyId,
+          secretAccessKey: environment.r2SecretAccessKey,
+          bucket: environment.r2Bucket,
+          publicBaseUrl: environment.r2PublicBaseUrl,
+        })
+      : undefined;
+
+  const catalogService =
+    database && vendorService
+      ? new CatalogService(
+          new PrismaCatalogRepository(database),
+          asVendorOwnershipBoundary(vendorService),
+          mediaStorage,
+        )
+      : undefined;
+
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
+  registerCatalogRoutes(app, { service: catalogService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
