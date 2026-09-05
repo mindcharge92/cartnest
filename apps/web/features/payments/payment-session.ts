@@ -3,6 +3,7 @@ import type { PaymentChannelDto } from "@repo/contracts";
 export interface PaymentReturnContext {
   readonly paymentIntentId: string;
   readonly orderId: string;
+  readonly channel: PaymentChannelDto | null;
   readonly storedAt: string;
 }
 
@@ -13,6 +14,7 @@ export interface PaymentSessionStorage {
 }
 
 const RETURN_CONTEXT_KEY = "cartnest.payment.return-context";
+const PAYMENT_CHANNELS = new Set<PaymentChannelDto>(["card", "bank", "ussd", "bank_transfer"]);
 
 function initializationKeyName(paymentIntentId: string, channel?: PaymentChannelDto): string {
   return `cartnest.payment.initialize:${paymentIntentId}:${channel ?? "auto"}`;
@@ -43,10 +45,12 @@ export function storePaymentReturnContext(
   storage: PaymentSessionStorage,
   paymentIntentId: string,
   orderId: string,
+  channel?: PaymentChannelDto,
 ): void {
   const context: PaymentReturnContext = {
     paymentIntentId,
     orderId,
+    channel: channel ?? null,
     storedAt: new Date().toISOString(),
   };
   storage.setItem(RETURN_CONTEXT_KEY, JSON.stringify(context));
@@ -64,9 +68,16 @@ export function readPaymentReturnContext(storage: PaymentSessionStorage): Paymen
     ) {
       return null;
     }
+    const channel =
+      parsed.channel === null || parsed.channel === undefined
+        ? null
+        : PAYMENT_CHANNELS.has(parsed.channel as PaymentChannelDto)
+          ? (parsed.channel as PaymentChannelDto)
+          : null;
     return {
       paymentIntentId: parsed.paymentIntentId,
       orderId: parsed.orderId,
+      channel,
       storedAt: parsed.storedAt,
     };
   } catch {
