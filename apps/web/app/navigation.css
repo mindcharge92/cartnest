@@ -1,0 +1,22 @@
+@media (max-width: 780px) {
+  .headerInner {
+    overflow: hidden;
+  }
+
+  .primaryNav {
+    min-width: 0;
+    max-width: calc(100vw - 4.5rem);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .primaryNav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .primaryNav > * {
+    flex: 0 0 auto;
+  }
+}
