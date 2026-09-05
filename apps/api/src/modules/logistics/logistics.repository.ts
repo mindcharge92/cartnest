@@ -17,7 +17,7 @@ export class PrismaLogisticsRepository {
         manualDeliveryFeeAmountMinor: body.manualDeliveryFeeAmountMinor ? BigInt(body.manualDeliveryFeeAmountMinor) : null,
         currency: body.currency,
         originAddress: body.originAddress as Prisma.InputJsonValue,
-        giglStationId: body.giglStationId,
+        ...(body.giglStationId ? { giglStationId: body.giglStationId } : {}),
         active: body.active ?? true,
       },
       update: {
@@ -26,7 +26,7 @@ export class PrismaLogisticsRepository {
         manualDeliveryFeeAmountMinor: body.manualDeliveryFeeAmountMinor ? BigInt(body.manualDeliveryFeeAmountMinor) : null,
         currency: body.currency,
         originAddress: body.originAddress as Prisma.InputJsonValue,
-        giglStationId: body.giglStationId,
+        giglStationId: body.giglStationId ?? null,
         active: body.active ?? true,
       },
     });
@@ -37,10 +37,17 @@ export class PrismaLogisticsRepository {
   }
 
   upsertVariantShippingProfile(variantId: string, body: VariantShippingProfileBodyDto) {
+    const data = {
+      weightGrams: body.weightGrams,
+      pieces: body.pieces ?? 1,
+      lengthMm: body.lengthMm ?? null,
+      widthMm: body.widthMm ?? null,
+      heightMm: body.heightMm ?? null,
+    };
     return this.database.variantShippingProfile.upsert({
       where: { variantId },
-      create: { variantId, ...body, pieces: body.pieces ?? 1 },
-      update: { ...body, pieces: body.pieces ?? 1 },
+      create: { variantId, ...data },
+      update: data,
     });
   }
 
@@ -49,18 +56,54 @@ export class PrismaLogisticsRepository {
   }
 
   async createQuote(input: {
-    userId: string; cartId: string; storeId: string; provider: ShipmentProviderDto;
-    amountMinor: bigint; currency: string; serviceCode?: string; providerQuoteReference?: string;
-    requestFingerprint: string; expiresAt: Date; metadata?: Prisma.InputJsonValue;
+    userId: string;
+    cartId: string;
+    cartUpdatedAt: Date;
+    storeId: string;
+    provider: ShipmentProviderDto;
+    amountMinor: bigint;
+    currency: string;
+    serviceCode?: string;
+    providerQuoteReference?: string;
+    requestFingerprint: string;
+    expiresAt: Date;
+    metadata?: Prisma.InputJsonValue;
   }) {
-    return this.database.shippingQuote.create({ data: input });
+    return this.database.shippingQuote.create({
+      data: {
+        userId: input.userId,
+        cartId: input.cartId,
+        cartUpdatedAt: input.cartUpdatedAt,
+        storeId: input.storeId,
+        provider: input.provider,
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        ...(input.serviceCode ? { serviceCode: input.serviceCode } : {}),
+        ...(input.providerQuoteReference ? { providerQuoteReference: input.providerQuoteReference } : {}),
+        requestFingerprint: input.requestFingerprint,
+        expiresAt: input.expiresAt,
+        ...(input.metadata ? { metadata: input.metadata } : {}),
+      },
+    });
   }
 
-  findLatestValidQuote(input: { userId: string; cartId: string; storeId: string; requestFingerprint: string; now: Date }) {
+  async findLatestValidQuote(input: {
+    userId: string;
+    cartId: string;
+    storeId: string;
+    requestFingerprint: string;
+    now: Date;
+  }) {
+    const cart = await this.database.cart.findFirst({
+      where: { id: input.cartId, userId: input.userId, status: "ACTIVE" },
+      select: { updatedAt: true },
+    });
+    if (!cart) return null;
     return this.database.shippingQuote.findFirst({
       where: {
         userId: input.userId,
         cartId: input.cartId,
+        cartUpdatedAt: cart.updatedAt,
         storeId: input.storeId,
         requestFingerprint: input.requestFingerprint,
         expiresAt: { gt: input.now },
@@ -86,12 +129,12 @@ export class PrismaLogisticsRepository {
         data: {
           vendorOrderId: input.vendorOrderId,
           provider: input.provider,
-          providerShipmentReference: input.providerShipmentReference,
-          trackingNumber: input.trackingNumber,
+          ...(input.providerShipmentReference ? { providerShipmentReference: input.providerShipmentReference } : {}),
+          ...(input.trackingNumber ? { trackingNumber: input.trackingNumber } : {}),
           status: input.provider === "MANUAL" ? "BOOKED" : "PENDING",
-          feeAmountMinor: input.feeAmountMinor,
-          currency: input.currency,
-          metadata: input.metadata,
+          ...(input.feeAmountMinor !== undefined ? { feeAmountMinor: input.feeAmountMinor } : {}),
+          ...(input.currency ? { currency: input.currency } : {}),
+          ...(input.metadata ? { metadata: input.metadata } : {}),
         },
       });
       for (const item of input.items) {
@@ -101,11 +144,17 @@ export class PrismaLogisticsRepository {
         data: { shipmentId: shipment.id, status: shipment.status, message: "Shipment created", eventTime: input.now },
       });
       await writeAuditEntry(tx, {
-        actorType: "USER", actorUserId: input.actorUserId, action: "shipment.created", entityType: "Shipment", entityId: shipment.id,
+        actorType: "USER",
+        actorUserId: input.actorUserId,
+        action: "shipment.created",
+        entityType: "Shipment",
+        entityId: shipment.id,
         metadata: { vendorOrderId: input.vendorOrderId, provider: input.provider },
       });
       await enqueueOutboxEvent(tx, {
-        aggregateType: "Shipment", aggregateId: shipment.id, eventType: "shipment.created",
+        aggregateType: "Shipment",
+        aggregateId: shipment.id,
+        eventType: "shipment.created",
         payload: { shipmentId: shipment.id, vendorOrderId: input.vendorOrderId, provider: input.provider },
       });
       return shipment.id;
@@ -122,16 +171,22 @@ export class PrismaLogisticsRepository {
   }
 
   async appendShipmentEvent(input: {
-    shipmentId: string; status: ShipmentStatusDto; message?: string; location?: string;
-    eventTime: Date; providerReference?: string; trackingNumber?: string; metadata?: Prisma.InputJsonValue;
+    shipmentId: string;
+    status: ShipmentStatusDto;
+    message?: string;
+    location?: string;
+    eventTime: Date;
+    providerReference?: string;
+    trackingNumber?: string;
+    metadata?: Prisma.InputJsonValue;
   }): Promise<ShipmentRecord> {
     await this.database.$transaction(async (tx) => {
       await tx.shipment.update({
         where: { id: input.shipmentId },
         data: {
           status: input.status,
-          providerShipmentReference: input.providerReference,
-          trackingNumber: input.trackingNumber,
+          ...(input.providerReference ? { providerShipmentReference: input.providerReference } : {}),
+          ...(input.trackingNumber ? { trackingNumber: input.trackingNumber } : {}),
           ...(input.metadata ? { metadata: input.metadata } : {}),
           ...(input.status === "DELIVERED" ? { deliveredAt: input.eventTime } : {}),
         },
@@ -140,13 +195,15 @@ export class PrismaLogisticsRepository {
         data: {
           shipmentId: input.shipmentId,
           status: input.status,
-          message: input.message,
-          location: input.location,
+          ...(input.message ? { message: input.message } : {}),
+          ...(input.location ? { location: input.location } : {}),
           eventTime: input.eventTime,
         },
       });
       await enqueueOutboxEvent(tx, {
-        aggregateType: "Shipment", aggregateId: input.shipmentId, eventType: "shipment.status_changed",
+        aggregateType: "Shipment",
+        aggregateId: input.shipmentId,
+        eventType: "shipment.status_changed",
         payload: { shipmentId: input.shipmentId, status: input.status, eventTime: input.eventTime.toISOString() },
       });
     });
