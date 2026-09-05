@@ -1,53 +1,20 @@
 "use client";
 
-import type { CatalogProductDetailResponseDto, ProductVariantDto } from "@repo/contracts";
+import type { CatalogProductDetailResponseDto } from "@repo/contracts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
 import { apiErrorMessage, catalogApi } from "../../lib/api";
-import { formatMoney } from "./catalog-utils";
-
-function variantSelection(variant: ProductVariantDto): Record<string, string> {
-  return Object.fromEntries(
-    variant.optionValues.map((selection) => [selection.optionId, selection.valueId]),
-  );
-}
-
-function variantMatches(variant: ProductVariantDto, selected: Readonly<Record<string, string>>): boolean {
-  const selectedEntries = Object.entries(selected).filter(([, value]) => Boolean(value));
-  if (selectedEntries.length === 0) return variant.optionValues.length === 0;
-  return variant.optionValues.length === selectedEntries.length &&
-    variant.optionValues.every((selection) => selected[selection.optionId] === selection.valueId);
-}
+import {
+  bestVariantForOptionValue,
+  formatMoney,
+  variantMatchesSelection,
+  variantSelection,
+} from "./catalog-utils";
 
 function initialSelection(product: CatalogProductDetailResponseDto): Record<string, string> {
   const firstVariant = product.variants[0];
   return firstVariant ? variantSelection(firstVariant) : {};
-}
-
-function bestVariantForValue(
-  variants: readonly ProductVariantDto[],
-  optionId: string,
-  valueId: string,
-  selected: Readonly<Record<string, string>>,
-): ProductVariantDto | null {
-  let best: { variant: ProductVariantDto; score: number } | null = null;
-
-  for (const variant of variants) {
-    const containsValue = variant.optionValues.some(
-      (selection) => selection.optionId === optionId && selection.valueId === valueId,
-    );
-    if (!containsValue) continue;
-
-    const score = variant.optionValues.reduce((matches, selection) => {
-      if (selection.optionId === optionId) return matches;
-      return selected[selection.optionId] === selection.valueId ? matches + 1 : matches;
-    }, 0);
-
-    if (!best || score > best.score) best = { variant, score };
-  }
-
-  return best?.variant ?? null;
 }
 
 export function ProductDetailBrowser({ productId }: Readonly<{ productId: string }>) {
@@ -78,7 +45,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
 
   const selectedVariant = useMemo(() => {
     if (!product) return null;
-    return product.variants.find((variant) => variantMatches(variant, selected)) ?? null;
+    return product.variants.find((variant) => variantMatchesSelection(variant, selected)) ?? null;
   }, [product, selected]);
 
   if (state === "loading") return <main className="pageShell"><LoadingState label="Loading product…" /></main>;
@@ -137,7 +104,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
                   <div className="optionValueRow">
                     {option.values.map((value) => {
                       const active = selected[option.id] === value.id;
-                      const compatibleVariant = bestVariantForValue(
+                      const compatibleVariant = bestVariantForOptionValue(
                         product.variants,
                         option.id,
                         value.id,
