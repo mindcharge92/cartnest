@@ -7,6 +7,12 @@ import { ErrorState, LoadingState } from "../../components/page-state";
 import { apiErrorMessage, catalogApi } from "../../lib/api";
 import { formatMoney } from "./catalog-utils";
 
+function variantSelection(variant: ProductVariantDto): Record<string, string> {
+  return Object.fromEntries(
+    variant.optionValues.map((selection) => [selection.optionId, selection.valueId]),
+  );
+}
+
 function variantMatches(variant: ProductVariantDto, selected: Readonly<Record<string, string>>): boolean {
   const selectedEntries = Object.entries(selected).filter(([, value]) => Boolean(value));
   if (selectedEntries.length === 0) return variant.optionValues.length === 0;
@@ -16,27 +22,32 @@ function variantMatches(variant: ProductVariantDto, selected: Readonly<Record<st
 
 function initialSelection(product: CatalogProductDetailResponseDto): Record<string, string> {
   const firstVariant = product.variants[0];
-  if (!firstVariant) return {};
-  return Object.fromEntries(firstVariant.optionValues.map((selection) => [selection.optionId, selection.valueId]));
+  return firstVariant ? variantSelection(firstVariant) : {};
 }
 
-function valueHasCompatibleVariant(
+function bestVariantForValue(
   variants: readonly ProductVariantDto[],
   optionId: string,
   valueId: string,
   selected: Readonly<Record<string, string>>,
-): boolean {
-  return variants.some((variant) => {
-    const hasTarget = variant.optionValues.some(
+): ProductVariantDto | null {
+  let best: { variant: ProductVariantDto; score: number } | null = null;
+
+  for (const variant of variants) {
+    const containsValue = variant.optionValues.some(
       (selection) => selection.optionId === optionId && selection.valueId === valueId,
     );
-    if (!hasTarget) return false;
-    return variant.optionValues.every((selection) => {
-      if (selection.optionId === optionId) return true;
-      const selectedValue = selected[selection.optionId];
-      return !selectedValue || selectedValue === selection.valueId;
-    });
-  });
+    if (!containsValue) continue;
+
+    const score = variant.optionValues.reduce((matches, selection) => {
+      if (selection.optionId === optionId) return matches;
+      return selected[selection.optionId] === selection.valueId ? matches + 1 : matches;
+    }, 0);
+
+    if (!best || score > best.score) best = { variant, score };
+  }
+
+  return best?.variant ?? null;
 }
 
 export function ProductDetailBrowser({ productId }: Readonly<{ productId: string }>) {
@@ -126,7 +137,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
                   <div className="optionValueRow">
                     {option.values.map((value) => {
                       const active = selected[option.id] === value.id;
-                      const hasCombination = valueHasCompatibleVariant(
+                      const compatibleVariant = bestVariantForValue(
                         product.variants,
                         option.id,
                         value.id,
@@ -137,9 +148,11 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
                           key={value.id}
                           type="button"
                           className={active ? "optionValue optionValueActive" : "optionValue"}
-                          disabled={!hasCombination}
+                          disabled={!compatibleVariant}
                           aria-pressed={active}
-                          onClick={() => setSelected((current) => ({ ...current, [option.id]: value.id }))}
+                          onClick={() => {
+                            if (compatibleVariant) setSelected(variantSelection(compatibleVariant));
+                          }}
                         >
                           {value.value}
                         </button>
