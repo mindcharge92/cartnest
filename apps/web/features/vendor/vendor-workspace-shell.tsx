@@ -10,6 +10,7 @@ interface WorkspaceLink {
   readonly label: string;
   readonly href: string;
   readonly permission?: VendorPermissionDto;
+  readonly permissions?: readonly VendorPermissionDto[];
   readonly ownerOrPermission?: VendorPermissionDto;
 }
 
@@ -32,13 +33,15 @@ export function VendorWorkspaceShell({
   const links: readonly WorkspaceLink[] = [
     { label: "Overview", href: root },
     { label: "Stores", href: `${root}/stores`, permission: "store:read" },
+    { label: "Products", href: `${root}/products`, permissions: ["store:read", "product:read"] },
     { label: "Verification", href: `${root}/kyc`, ownerOrPermission: "verification:manage" },
     { label: "Staff & permissions", href: `${root}/staff`, permission: "staff:read" },
   ];
 
   const visibleLinks = links.filter((link) => {
-    if (!link.permission && !link.ownerOrPermission) return true;
+    if (!link.permission && !link.permissions && !link.ownerOrPermission) return true;
     if (link.permission) return hasVendorPermission(access, link.permission);
+    if (link.permissions) return link.permissions.every((permission) => hasVendorPermission(access, permission));
     return access.membership.status === "ACTIVE" &&
       (access.membership.role === "OWNER" || hasVendorPermission(access, link.ownerOrPermission!));
   });
