@@ -40,5 +40,6 @@ export * from "./payment.js";
 export * from "./logistics.js";
 export * from "./returns.js";
 export * from "./admin.js";
+export * from "./admin-operations.js";
 
 export const CONTRACT_VERSION = 1 as const;
