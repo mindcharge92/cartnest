@@ -15,6 +15,9 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
+import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
+import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
+import { VendorService } from "./modules/vendors/vendor.service.js";
 
 export interface ReadinessProbes {
   readonly database: () => Promise<boolean>;
@@ -67,6 +70,8 @@ export function buildApp(
       tags: [
         { name: "system", description: "Platform health, readiness, and API metadata" },
         { name: "auth", description: "Identity, sessions, verification, OAuth, and MFA" },
+        { name: "vendors", description: "Vendor applications, stores, staff, KYC, and settlement account visibility" },
+        { name: "admin", description: "Privileged marketplace administration and vendor review" },
       ],
     },
   });
@@ -78,8 +83,15 @@ export function buildApp(
     });
   }
 
-  const authService = database ? new AuthService(new PrismaAuthRepository(database), environment) : undefined;
+  const authService = database
+    ? new AuthService(new PrismaAuthRepository(database), environment)
+    : undefined;
+  const vendorService = database
+    ? new VendorService(new PrismaVendorRepository(database))
+    : undefined;
+
   registerAuthRoutes(app, { service: authService, environment });
+  registerVendorRoutes(app, { service: vendorService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
@@ -89,21 +101,58 @@ export function buildApp(
     };
   }
 
-  app.get("/health", {
-    schema: { tags: ["system"], operationId: "getHealth", response: { 200: HealthResponseSchema } },
-  }, async () => ({ status: "ok" as const, service: "cartnest-api" as const, uptimeSeconds: Math.floor(process.uptime()) }));
+  app.get(
+    "/health",
+    {
+      schema: {
+        tags: ["system"],
+        operationId: "getHealth",
+        response: { 200: HealthResponseSchema },
+      },
+    },
+    async () => ({
+      status: "ok" as const,
+      service: "cartnest-api" as const,
+      uptimeSeconds: Math.floor(process.uptime()),
+    }),
+  );
 
-  app.get("/ready", {
-    schema: { tags: ["system"], operationId: "getReadiness", response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema } },
-  }, async (_request, reply) => {
-    const dependencies = await dependencyStates();
-    const ready = dependencies.database === "ready" && dependencies.redis === "ready";
-    return reply.code(ready ? 200 : 503).send({ status: ready ? ("ready" as const) : ("not-ready" as const), service: "cartnest-api" as const, dependencies });
-  });
+  app.get(
+    "/ready",
+    {
+      schema: {
+        tags: ["system"],
+        operationId: "getReadiness",
+        response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
+      },
+    },
+    async (_request, reply) => {
+      const dependencies = await dependencyStates();
+      const ready = dependencies.database === "ready" && dependencies.redis === "ready";
+      return reply.code(ready ? 200 : 503).send({
+        status: ready ? ("ready" as const) : ("not-ready" as const),
+        service: "cartnest-api" as const,
+        dependencies,
+      });
+    },
+  );
 
-  app.get("/api/v1/system/info", {
-    schema: { tags: ["system"], operationId: "getSystemInfo", response: { 200: SystemInfoResponseSchema } },
-  }, async () => ({ service: "cartnest-api" as const, apiVersion: "v1" as const, timestamp: new Date().toISOString(), dependencies: await dependencyStates() }));
+  app.get(
+    "/api/v1/system/info",
+    {
+      schema: {
+        tags: ["system"],
+        operationId: "getSystemInfo",
+        response: { 200: SystemInfoResponseSchema },
+      },
+    },
+    async () => ({
+      service: "cartnest-api" as const,
+      apiVersion: "v1" as const,
+      timestamp: new Date().toISOString(),
+      dependencies: await dependencyStates(),
+    }),
+  );
 
   return app;
 }
