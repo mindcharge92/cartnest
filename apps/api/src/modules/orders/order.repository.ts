@@ -102,6 +102,7 @@ export type CheckoutCreateResult =
   | { readonly kind: "idempotency_conflict" }
   | { readonly kind: "checkout_in_progress" }
   | { readonly kind: "cart_changed" }
+  | { readonly kind: "promotion_conflict" }
   | { readonly kind: "stock_conflict"; readonly variantId: string };
 
 export interface OrderRepository {
@@ -201,6 +202,27 @@ function orderNumber(now: Date): string {
   const random = crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase();
   return `CN-${date}-${random}`;
 }
+
+function allocateAmount(total: bigint, bases: readonly bigint[]): bigint[] {
+  if (bases.length === 0) return [];
+  const baseTotal = bases.reduce((sum, value) => sum + value, 0n);
+  if (total === 0n || baseTotal === 0n) return bases.map(() => 0n);
+  let allocated = 0n;
+  return bases.map((base, index) => {
+    const share = index === bases.length - 1 ? total - allocated : (total * base) / baseTotal;
+    allocated += share;
+    return share;
+  });
+}
+
+type LockedPromotion = {
+  id: string;
+  status: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  maxRedemptions: number | null;
+  perUserLimit: number | null;
+};
 
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly database: DatabaseClient) {}
@@ -334,6 +356,30 @@ export class PrismaOrderRepository implements OrderRepository {
           itemSubtotalAmountMinor - discountAmountMinor + deliveryAmountMinor + taxAmountMinor;
         if (grandTotalAmountMinor < 0n) throw new Error("CHECKOUT_CART_CHANGED");
 
+        const promotionIds = [...new Set(input.storeQuotes.map((entry) => entry.quote.promotionId).filter((id): id is string => Boolean(id)))];
+        const promotionId = promotionIds[0];
+        if (promotionIds.length > 1) throw new Error("CHECKOUT_PROMOTION_CONFLICT");
+        if (promotionId) {
+          const rows = await transaction.$queryRaw<LockedPromotion[]>(Prisma.sql`
+            SELECT "id", "status", "startsAt", "endsAt", "maxRedemptions", "perUserLimit"
+            FROM "Promotion"
+            WHERE "id" = ${promotionId}::uuid
+            FOR UPDATE
+          `);
+          const promotion = rows[0];
+          if (!promotion || promotion.status !== "ACTIVE" || promotion.startsAt > input.now || (promotion.endsAt && promotion.endsAt <= input.now)) {
+            throw new Error("CHECKOUT_PROMOTION_CONFLICT");
+          }
+          if (promotion.maxRedemptions !== null) {
+            const count = await transaction.promotionRedemption.count({ where: { promotionId } });
+            if (count >= promotion.maxRedemptions) throw new Error("CHECKOUT_PROMOTION_CONFLICT");
+          }
+          if (promotion.perUserLimit !== null) {
+            const count = await transaction.promotionRedemption.count({ where: { promotionId, userId: input.userId } });
+            if (count >= promotion.perUserLimit) throw new Error("CHECKOUT_PROMOTION_CONFLICT");
+          }
+        }
+
         const order = await transaction.order.create({
           data: {
             orderNumber: orderNumber(input.now),
@@ -349,6 +395,17 @@ export class PrismaOrderRepository implements OrderRepository {
             deliveryAddressSnapshot: input.deliveryAddress as Prisma.InputJsonValue,
           },
         });
+
+        if (promotionId && discountAmountMinor > 0n) {
+          await transaction.promotionRedemption.create({
+            data: {
+              promotionId,
+              userId: input.userId,
+              orderId: order.id,
+              amountMinor: discountAmountMinor,
+            },
+          });
+        }
 
         for (const variantId of [...new Set(currentLines.map((line) => line.variantId))].sort()) {
           const line = currentLines.find((entry) => entry.variantId === variantId)!;
@@ -376,10 +433,11 @@ export class PrismaOrderRepository implements OrderRepository {
 
         for (const [storeId, lines] of linesByStore) {
           const storeQuote = quoteByStore.get(storeId)!;
-          const storeSubtotal = lines.reduce(
-            (sum, line) => sum + line.unitPriceAmountMinor * BigInt(line.quantity),
-            0n,
-          );
+          const lineSubtotals = lines.map((line) => line.unitPriceAmountMinor * BigInt(line.quantity));
+          const storeSubtotal = lineSubtotals.reduce((sum, value) => sum + value, 0n);
+          const lineDiscounts = allocateAmount(storeQuote.quote.discountAmountMinor, lineSubtotals);
+          const taxableBases = lineSubtotals.map((subtotal, index) => subtotal - (lineDiscounts[index] ?? 0n));
+          const lineTaxes = allocateAmount(storeQuote.quote.taxAmountMinor, taxableBases);
           const storeTotal =
             storeSubtotal -
             storeQuote.quote.discountAmountMinor +
@@ -404,8 +462,10 @@ export class PrismaOrderRepository implements OrderRepository {
             },
           });
 
-          for (const line of lines) {
-            const subtotal = line.unitPriceAmountMinor * BigInt(line.quantity);
+          for (const [index, line] of lines.entries()) {
+            const subtotal = lineSubtotals[index]!;
+            const discount = lineDiscounts[index] ?? 0n;
+            const tax = lineTaxes[index] ?? 0n;
             await transaction.orderItem.create({
               data: {
                 vendorOrderId: vendorOrder.id,
@@ -417,9 +477,9 @@ export class PrismaOrderRepository implements OrderRepository {
                 unitPriceAmountMinor: line.unitPriceAmountMinor,
                 quantity: line.quantity,
                 subtotalAmountMinor: subtotal,
-                discountAmountMinor: 0n,
-                taxAmountMinor: 0n,
-                lineTotalAmountMinor: subtotal,
+                discountAmountMinor: discount,
+                taxAmountMinor: tax,
+                lineTotalAmountMinor: subtotal - discount + tax,
                 currency,
               },
             });
@@ -446,6 +506,7 @@ export class PrismaOrderRepository implements OrderRepository {
             cartId: cart.id,
             reservationExpiresAt: expiresAt.toISOString(),
             vendorOrderCount: linesByStore.size,
+            promotionId: promotionId ?? null,
           },
         });
         await enqueueOutboxEvent(transaction, {
@@ -456,6 +517,7 @@ export class PrismaOrderRepository implements OrderRepository {
             orderId: order.id,
             userId: input.userId,
             reservationExpiresAt: expiresAt.toISOString(),
+            promotionId: promotionId ?? null,
           },
         });
         await transaction.idempotencyRecord.update({
@@ -492,6 +554,9 @@ export class PrismaOrderRepository implements OrderRepository {
       }
       if (error instanceof Error && error.message === "CHECKOUT_CART_CHANGED") {
         return { kind: "cart_changed" };
+      }
+      if (error instanceof Error && error.message === "CHECKOUT_PROMOTION_CONFLICT") {
+        return { kind: "promotion_conflict" };
       }
       if (error instanceof Error && error.message.startsWith("CHECKOUT_STOCK_CONFLICT:")) {
         return { kind: "stock_conflict", variantId: error.message.split(":")[1]! };
@@ -549,7 +614,7 @@ export class PrismaOrderRepository implements OrderRepository {
         where: { id: reservation.id },
         data: {
           status,
-          ...(status === "RELEASED" ? { releasedAt: now } : { releasedAt: now }),
+          releasedAt: now,
         },
       });
     }
@@ -579,6 +644,7 @@ export class PrismaOrderRepository implements OrderRepository {
         where: { orderId: order.id, status: "PENDING" },
         data: { status: "CANCELLED" },
       });
+      await transaction.promotionRedemption.deleteMany({ where: { orderId: order.id } });
       await transaction.order.update({
         where: { id: order.id },
         data: { status: "CANCELLED", paymentStatus: "CANCELLED", cancelledAt: input.now },
@@ -688,6 +754,7 @@ export class PrismaOrderRepository implements OrderRepository {
           where: { orderId: vendorOrder.orderId, status: "PENDING" },
           data: { status: "CANCELLED" },
         });
+        await transaction.promotionRedemption.deleteMany({ where: { orderId: vendorOrder.orderId } });
         await transaction.order.update({
           where: { id: vendorOrder.orderId },
           data: { status: "CANCELLED", paymentStatus: "CANCELLED", cancelledAt: input.now },
@@ -762,6 +829,7 @@ export class PrismaOrderRepository implements OrderRepository {
           where: { orderId, status: "PENDING" },
           data: { status: "CANCELLED" },
         });
+        await transaction.promotionRedemption.deleteMany({ where: { orderId } });
         await transaction.order.update({
           where: { id: orderId },
           data: { status: "CANCELLED", paymentStatus: "CANCELLED", cancelledAt: now },
