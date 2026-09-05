@@ -136,6 +136,7 @@ function fingerprint(body: CheckoutBodyDto): string {
   return createHash("sha256").update(JSON.stringify({
     recipientName: a.recipientName, phone: a.phone, line1: a.line1, line2: a.line2 ?? null,
     city: a.city, state: a.state, postalCode: a.postalCode ?? null, countryCode: a.countryCode,
+    promotionCode: body.promotionCode?.trim().toUpperCase() ?? null,
   })).digest("hex");
 }
 
@@ -153,6 +154,28 @@ function groupDraft(draft: CheckoutDraft): Map<string, CheckoutDraftLine[]> {
     groups.set(line.storeId, items);
   }
   return groups;
+}
+
+function policyError(error: unknown): never {
+  if (!(error instanceof Error)) throw error;
+  switch (error.message) {
+    case "SHIPPING_QUOTE_REQUIRED":
+      throw new OrderError("SHIPPING_QUOTE_REQUIRED", "Generate a valid shipping quote for every store before checkout.", 409);
+    case "PROMOTION_INVALID":
+      throw new OrderError("PROMOTION_INVALID", "The promotion code is invalid or inactive.", 409);
+    case "PROMOTION_MINIMUM_NOT_MET":
+      throw new OrderError("PROMOTION_MINIMUM_NOT_MET", "The cart does not meet the promotion minimum.", 409);
+    case "PROMOTION_EXHAUSTED":
+      throw new OrderError("PROMOTION_EXHAUSTED", "This promotion has reached its redemption limit.", 409);
+    case "PROMOTION_USER_LIMIT_REACHED":
+      throw new OrderError("PROMOTION_USER_LIMIT_REACHED", "You have reached the redemption limit for this promotion.", 409);
+    case "TAX_RATE_REQUIRED":
+      throw new OrderError("CHECKOUT_TAX_CONFIGURATION_REQUIRED", "Checkout tax configuration is unavailable.", 503);
+    case "COMMISSION_RULE_REQUIRED":
+      throw new OrderError("CHECKOUT_COMMISSION_CONFIGURATION_REQUIRED", "Checkout commission configuration is unavailable.", 503);
+    default:
+      throw error;
+  }
 }
 
 export class OrderService {
@@ -181,6 +204,7 @@ export class OrderService {
           storeId,
           currency: first.currency,
           deliveryAddress: body.deliveryAddress,
+          ...(body.promotionCode ? { promotionCode: body.promotionCode } : {}),
           itemSubtotalAmountMinor: subtotal,
           lines: lines.map((line) => ({
             productId: line.productId,
@@ -191,10 +215,7 @@ export class OrderService {
           })),
         });
       } catch (error) {
-        if (error instanceof Error && error.message === "SHIPPING_QUOTE_REQUIRED") {
-          throw new OrderError("SHIPPING_QUOTE_REQUIRED", "Generate a valid shipping quote for every store before checkout.", 409);
-        }
-        throw error;
+        policyError(error);
       }
       assertQuote(quote, subtotal);
       storeQuotes.push({ storeId, vendorId: first.vendorId, quote, acceptanceMode: await this.acceptancePolicy.modeForStore(storeId) });
@@ -215,6 +236,7 @@ export class OrderService {
     if (result.kind === "idempotency_conflict") throw new OrderError("IDEMPOTENCY_KEY_REUSED", "This idempotency key was already used with a different checkout request.", 409);
     if (result.kind === "checkout_in_progress") throw new OrderError("CHECKOUT_IN_PROGRESS", "This checkout request is already being processed.", 409);
     if (result.kind === "stock_conflict") throw new OrderError("INSUFFICIENT_STOCK", `Stock changed while checkout was being created for variant ${result.variantId}.`, 409);
+    if (result.kind === "promotion_conflict") throw new OrderError("PROMOTION_REVALIDATION_REQUIRED", "Promotion availability changed during checkout. Refresh and try again.", 409);
     throw new OrderError("CHECKOUT_REVALIDATION_REQUIRED", "The cart changed during checkout. Refresh the cart and try again.", 409);
   }
 
