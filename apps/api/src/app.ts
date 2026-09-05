@@ -48,6 +48,9 @@ import { PrismaPaymentRepository } from "./modules/payments/payment.repository.j
 import { registerPaymentRoutes } from "./modules/payments/payment.routes.js";
 import { PaymentService } from "./modules/payments/payment.service.js";
 import { PaystackAdapter } from "./modules/payments/paystack.adapter.js";
+import { PrismaReturnsRepository } from "./modules/returns/returns.repository.js";
+import { registerReturnsRoutes } from "./modules/returns/returns.routes.js";
+import { ReturnsService } from "./modules/returns/returns.service.js";
 import { asVendorOwnershipBoundary } from "./modules/vendors/vendor.public.js";
 import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
 import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
@@ -124,6 +127,9 @@ export function buildApp(
         { name: "vendor-orders", description: "Vendor-scoped order queue and processing boundary" },
         { name: "payments", description: "Provider-neutral payment initialization, verification, and webhooks" },
         { name: "logistics", description: "Shipping quotes, fulfillment profiles, shipments, and tracking" },
+        { name: "returns", description: "RMA requests, return state, and returned-stock policy" },
+        { name: "refunds", description: "Partial/full refund requests, provider execution, and reconciliation" },
+        { name: "reviews", description: "Verified-purchase product/store reviews and moderation" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -216,7 +222,7 @@ export function buildApp(
       ? new BuyerLogisticsQueryService(logisticsRepository, orderFulfillmentBoundary)
       : undefined;
 
-  // P8 now replaces the zero-delivery checkout seam with persisted, expiring
+  // P8 replaces the zero-delivery checkout seam with persisted, expiring
   // per-store shipping quotes. Tax and promotions remain P10 seams, so
   // production checkout stays disabled until those policies are configured.
   const baseFinancialPolicy = database
@@ -256,6 +262,15 @@ export function buildApp(
         environment.paymentCallbackUrl,
       )
     : undefined;
+  const returnsService =
+    database && vendorBoundary
+      ? new ReturnsService(
+          database,
+          new PrismaReturnsRepository(database),
+          vendorBoundary,
+          paymentAdapters,
+        )
+      : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
@@ -270,6 +285,7 @@ export function buildApp(
     buyerQueryService: buyerLogisticsQueryService,
     authService,
   });
+  registerReturnsRoutes(app, { service: returnsService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
