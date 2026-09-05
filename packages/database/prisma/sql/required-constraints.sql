@@ -112,6 +112,159 @@ ALTER TABLE "PaymentIntent"
 ALTER TABLE "PaymentAttempt"
   ADD CONSTRAINT "PaymentAttempt_amount_nonnegative" CHECK ("amountMinor" >= 0);
 
+-- Payment/cancellation interlock.
+-- Payment-attempt creation and cancellation both serialize on the parent Order row.
+-- This prevents a cancellation/expiry transaction from releasing inventory while a
+-- provider request is being created, and prevents a stale payment amount from being
+-- charged after a partial vendor-order cancellation changes the parent total.
+CREATE OR REPLACE FUNCTION "CartNest_guard_payment_attempt_insert"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  parent_order_id uuid;
+  parent_status text;
+  parent_payment_status text;
+  intent_status text;
+  intent_amount bigint;
+  intent_currency text;
+BEGIN
+  SELECT "orderId"
+  INTO parent_order_id
+  FROM "PaymentIntent"
+  WHERE "id" = NEW."paymentIntentId";
+
+  IF parent_order_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Order is always the first concurrency lock for payment/cancellation state.
+  PERFORM 1 FROM "Order" WHERE "id" = parent_order_id FOR UPDATE;
+
+  SELECT
+    o."status"::text,
+    o."paymentStatus"::text,
+    p."status"::text,
+    p."amountMinor",
+    p."currency"::text
+  INTO
+    parent_status,
+    parent_payment_status,
+    intent_status,
+    intent_amount,
+    intent_currency
+  FROM "PaymentIntent" p
+  JOIN "Order" o ON o."id" = p."orderId"
+  WHERE p."id" = NEW."paymentIntentId";
+
+  IF parent_status NOT IN ('PENDING_PAYMENT', 'PARTIALLY_CANCELLED')
+     OR parent_payment_status <> 'PENDING'
+     OR intent_status NOT IN ('PENDING', 'FAILED') THEN
+    RAISE EXCEPTION 'ORDER_PAYMENT_STATE_CHANGED';
+  END IF;
+
+  IF NEW."amountMinor" <> intent_amount OR NEW."currency"::text <> intent_currency THEN
+    RAISE EXCEPTION 'ORDER_PAYMENT_AMOUNT_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM "PaymentAttempt" pa
+    WHERE pa."paymentIntentId" = NEW."paymentIntentId"
+      AND pa."status" IN ('PENDING', 'REQUIRES_ACTION', 'PROCESSING', 'SUCCEEDED')
+  ) THEN
+    RAISE EXCEPTION 'ORDER_PAYMENT_ACTIVE';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM "VendorOrder" vo
+    WHERE vo."orderId" = parent_order_id
+      AND vo."status" <> 'CANCELLED'
+  ) OR EXISTS (
+    SELECT 1
+    FROM (
+      SELECT oi."variantId", SUM(oi."quantity")::integer AS expected_quantity
+      FROM "VendorOrder" vo
+      JOIN "OrderItem" oi ON oi."vendorOrderId" = vo."id"
+      WHERE vo."orderId" = parent_order_id
+        AND vo."status" <> 'CANCELLED'
+      GROUP BY oi."variantId"
+    ) expected
+    LEFT JOIN "InventoryReservation" r
+      ON r."orderId" = parent_order_id
+     AND r."variantId" = expected."variantId"
+     AND r."status" = 'HELD'
+    WHERE r."id" IS NULL
+       OR r."quantity" <> expected.expected_quantity
+       OR r."expiresAt" <= clock_timestamp()
+  ) THEN
+    RAISE EXCEPTION 'PAYMENT_RESERVATION_EXPIRED';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "PaymentAttempt_guard_payable_order"
+BEFORE INSERT ON "PaymentAttempt"
+FOR EACH ROW
+EXECUTE FUNCTION "CartNest_guard_payment_attempt_insert"();
+
+CREATE OR REPLACE FUNCTION "CartNest_guard_vendor_order_cancellation"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW."status" = 'CANCELLED' AND OLD."status" <> 'CANCELLED' THEN
+    PERFORM 1 FROM "Order" WHERE "id" = NEW."orderId" FOR UPDATE;
+
+    IF EXISTS (
+      SELECT 1
+      FROM "PaymentIntent" p
+      JOIN "PaymentAttempt" pa ON pa."paymentIntentId" = p."id"
+      WHERE p."orderId" = NEW."orderId"
+        AND pa."status" IN ('PENDING', 'REQUIRES_ACTION', 'PROCESSING', 'SUCCEEDED')
+    ) THEN
+      RAISE EXCEPTION 'ORDER_PAYMENT_ACTIVE';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "VendorOrder_guard_active_payment_cancellation"
+BEFORE UPDATE OF "status" ON "VendorOrder"
+FOR EACH ROW
+EXECUTE FUNCTION "CartNest_guard_vendor_order_cancellation"();
+
+CREATE OR REPLACE FUNCTION "CartNest_guard_order_cancellation"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW."status" = 'CANCELLED' AND OLD."status" <> 'CANCELLED' THEN
+    IF EXISTS (
+      SELECT 1
+      FROM "PaymentIntent" p
+      JOIN "PaymentAttempt" pa ON pa."paymentIntentId" = p."id"
+      WHERE p."orderId" = NEW."id"
+        AND pa."status" IN ('PENDING', 'REQUIRES_ACTION', 'PROCESSING', 'SUCCEEDED')
+    ) THEN
+      RAISE EXCEPTION 'ORDER_PAYMENT_ACTIVE';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "Order_guard_active_payment_cancellation"
+BEFORE UPDATE OF "status" ON "Order"
+FOR EACH ROW
+EXECUTE FUNCTION "CartNest_guard_order_cancellation"();
+
 ALTER TABLE "PaymentAllocation"
   ADD CONSTRAINT "PaymentAllocation_amount_nonnegative" CHECK ("amountMinor" >= 0);
 
