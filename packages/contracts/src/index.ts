@@ -230,4 +230,57 @@ export {
   type CatalogProductDetailResponseDto,
 } from "./catalog-public-detail.js";
 
+export {
+  AdjustInventoryBodySchema,
+  InventoryAdjustmentListResponseSchema,
+  InventoryAdjustmentSchema,
+  InventoryItemSchema,
+  InventoryListResponseSchema,
+  StoreInventoryParamsSchema,
+  VariantInventoryParamsSchema,
+  type AdjustInventoryBodyDto,
+  type InventoryAdjustmentDto,
+  type InventoryAdjustmentListResponseDto,
+  type InventoryItemDto,
+  type InventoryListResponseDto,
+  type StoreInventoryParamsDto,
+  type VariantInventoryParamsDto,
+} from "./inventory.js";
+
+export {
+  AddWishlistItemBodySchema,
+  WishlistItemParamsSchema,
+  WishlistItemSchema,
+  WishlistResponseSchema,
+  type AddWishlistItemBodyDto,
+  type WishlistItemDto,
+  type WishlistItemParamsDto,
+  type WishlistResponseDto,
+} from "./wishlist.js";
+
+export {
+  AddCartItemBodySchema,
+  CartItemParamsSchema,
+  CartItemSchema,
+  CartProductSummarySchema,
+  CartResponseSchema,
+  CartStatusSchema,
+  CheckoutPreviewIssueCodeSchema,
+  CheckoutPreviewIssueSchema,
+  CheckoutPreviewResponseSchema,
+  CheckoutPreviewStoreGroupSchema,
+  UpdateCartItemBodySchema,
+  type AddCartItemBodyDto,
+  type CartItemDto,
+  type CartItemParamsDto,
+  type CartProductSummaryDto,
+  type CartResponseDto,
+  type CartStatusDto,
+  type CheckoutPreviewIssueCodeDto,
+  type CheckoutPreviewIssueDto,
+  type CheckoutPreviewResponseDto,
+  type CheckoutPreviewStoreGroupDto,
+  type UpdateCartItemBodyDto,
+} from "./cart.js";
+
 export const CONTRACT_VERSION = 1 as const;
