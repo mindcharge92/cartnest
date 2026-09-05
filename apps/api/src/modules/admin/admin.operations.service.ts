@@ -118,7 +118,7 @@ export class AdminOperationsService {
           id: refund.id,
           vendorOrderId: refund.vendorOrderId,
           provider: refund.provider,
-          providerRefundReference: refund.providerRefundRef,
+          providerRefundReference: refund.providerRefundReference,
           status: refund.status,
           amount: money(refund.amountMinor, refund.currency),
           reason: refund.reason,
