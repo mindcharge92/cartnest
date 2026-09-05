@@ -330,7 +330,8 @@ export class VendorService {
     requireVendorPermission(actor, "staff:invite");
 
     if (actor.role === "STAFF") {
-      const disallowed = input.permissions.filter((permission) => !actor.permissions.includes(permission));
+      const actorPermissions = new Set(effectiveVendorPermissions(actor));
+      const disallowed = input.permissions.filter((permission) => !actorPermissions.has(permission));
       if (disallowed.length > 0) {
         throw new VendorError(
           "PERMISSION_DELEGATION_FORBIDDEN",
@@ -428,7 +429,8 @@ export class VendorService {
       throw new VendorError("VENDOR_OWNER_REQUIRED", "Only an owner can change membership roles.", 403);
     }
     if (actor.role === "STAFF" && input.permissions) {
-      if (input.permissions.some((permission) => !actor.permissions.includes(permission))) {
+      const actorPermissions = new Set(effectiveVendorPermissions(actor));
+      if (input.permissions.some((permission) => !actorPermissions.has(permission))) {
         throw new VendorError(
           "PERMISSION_DELEGATION_FORBIDDEN",
           "Staff cannot delegate permissions they do not hold.",
