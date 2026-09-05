@@ -159,13 +159,36 @@ function publicMedia(record: ProductRecord, storage?: MediaStorage): PublicMedia
     .filter((media): media is PublicMediaDto => media !== null);
 }
 
-function priceFrom(record: ProductRecord): { amountMinor: string; currency: string } {
+interface PublicPriceFilter {
+  readonly currency: string;
+  readonly minPriceMinor?: bigint;
+  readonly maxPriceMinor?: bigint;
+}
+
+function variantsForPrice(record: ProductRecord, filter?: PublicPriceFilter): VariantRecord[] {
   const variants = activeVariants(record);
+  if (!filter) return variants;
+  return variants.filter(
+    (variant) =>
+      variant.currency === filter.currency &&
+      (filter.minPriceMinor === undefined || variant.priceAmountMinor >= filter.minPriceMinor) &&
+      (filter.maxPriceMinor === undefined || variant.priceAmountMinor <= filter.maxPriceMinor),
+  );
+}
+
+function priceFrom(
+  record: ProductRecord,
+  filter?: PublicPriceFilter,
+): { amountMinor: string; currency: string } {
+  const variants = variantsForPrice(record, filter);
   if (variants.length === 0) {
-    throw new CatalogError("PRODUCT_HAS_NO_ACTIVE_VARIANTS", "Product has no active variants.", 409);
+    throw new CatalogError("PRODUCT_HAS_NO_ACTIVE_VARIANTS", "Product has no active variants matching the catalog filter.", 409);
   }
-  const currency = variants[0]!.currency;
+  const currency = filter?.currency ?? variants[0]!.currency;
   const sameCurrency = variants.filter((variant) => variant.currency === currency);
+  if (sameCurrency.length === 0) {
+    throw new CatalogError("PRODUCT_HAS_NO_ACTIVE_VARIANTS", "Product has no active variants in the requested currency.", 409);
+  }
   const minimum = sameCurrency.reduce(
     (value, variant) => (variant.priceAmountMinor < value ? variant.priceAmountMinor : value),
     sameCurrency[0]!.priceAmountMinor,
@@ -173,7 +196,11 @@ function priceFrom(record: ProductRecord): { amountMinor: string; currency: stri
   return { amountMinor: minimum.toString(), currency };
 }
 
-function toPublicSummary(record: ProductRecord, storage?: MediaStorage): CatalogProductSummaryDto {
+function toPublicSummary(
+  record: ProductRecord,
+  storage?: MediaStorage,
+  priceFilter?: PublicPriceFilter,
+): CatalogProductSummaryDto {
   return {
     id: record.id,
     name: record.name,
@@ -186,7 +213,7 @@ function toPublicSummary(record: ProductRecord, storage?: MediaStorage): Catalog
       vendorDisplayName: record.store.vendor.displayName,
     },
     category: record.category ? toCategory(record.category) : null,
-    priceFrom: priceFrom(record),
+    priceFrom: priceFrom(record, priceFilter),
     media: publicMedia(record, storage),
     createdAt: record.createdAt.toISOString(),
   };
@@ -419,7 +446,7 @@ export class CatalogService {
   }
 
   async listStoreProducts(principal: AccessPrincipal, storeId: string): Promise<VendorProductDto[]> {
-    await this.vendorBoundary.requireStorePermission(principal, storeId, "product:update");
+    await this.vendorBoundary.requireStorePermission(principal, storeId, "product:read");
     return (await this.repository.listStoreProducts(storeId)).map((product) =>
       toVendorProduct(product, this.mediaStorage),
     );
@@ -428,7 +455,7 @@ export class CatalogService {
   private async vendorProduct(
     principal: AccessPrincipal,
     productId: string,
-    permission: "product:update" | "product:archive",
+    permission: "product:read" | "product:update" | "product:archive",
   ): Promise<ProductRecord> {
     const product = await this.repository.findProduct(productId);
     if (!product) throw new CatalogError("PRODUCT_NOT_FOUND", "Product was not found.", 404);
@@ -438,7 +465,7 @@ export class CatalogService {
 
   async getVendorProduct(principal: AccessPrincipal, productId: string): Promise<VendorProductDto> {
     return toVendorProduct(
-      await this.vendorProduct(principal, productId, "product:update"),
+      await this.vendorProduct(principal, productId, "product:read"),
       this.mediaStorage,
     );
   }
@@ -457,9 +484,20 @@ export class CatalogService {
         throw new CatalogError("PRODUCT_SLUG_TAKEN", "That product slug is already used by this store.", 409);
       }
     }
-    const updated = await this.repository.updateProduct(productId, input);
+    let updated = await this.repository.updateProduct(productId, input);
     if (!updated) throw new CatalogError("PRODUCT_NOT_FOUND", "Product was not found.", 404);
-    await this.audit(principal, "catalog.product.updated", "Product", productId, requestId);
+
+    // Products that have entered the moderation workflow must not keep a prior
+    // approval after vendor-editable content changes. Normal NOT_REQUIRED
+    // products continue to publish immediately under the accepted policy.
+    if (existing.moderationStatus !== "NOT_REQUIRED") {
+      const requeued = await this.repository.setModerationStatus(productId, "PENDING");
+      if (requeued) updated = requeued;
+    }
+
+    await this.audit(principal, "catalog.product.updated", "Product", productId, requestId, {
+      moderationRequeued: existing.moderationStatus !== "NOT_REQUIRED",
+    });
     return toVendorProduct(updated, this.mediaStorage);
   }
 
@@ -715,6 +753,13 @@ export class CatalogService {
     throw new CatalogError("MEDIA_OWNER_INVALID", "Media does not have a valid owner.", 409);
   }
 
+  private async requeueModeratedProduct(productId: string | null): Promise<void> {
+    if (!productId) return;
+    const product = await this.repository.findProduct(productId);
+    if (!product || product.moderationStatus === "NOT_REQUIRED") return;
+    await this.repository.setModerationStatus(productId, "PENDING");
+  }
+
   async completeMediaUpload(
     principal: AccessPrincipal,
     mediaId: string,
@@ -737,10 +782,11 @@ export class CatalogService {
       throw new CatalogError("MEDIA_SIZE_MISMATCH", "Uploaded media size does not match the upload intent.", 409);
     }
     if (object.contentType && object.contentType !== media.mimeType) {
-      throw new CatalogError("MEDIA_TYPE_MISMATCH", "Uploaded media type does not match the upload intent.", 409);
+      throw new CatalogError("MEDIA_TYPE_MISMATCH", "Uploaded media bytes/type do not match the upload intent.", 409);
     }
     const completed = await this.repository.completeMedia(mediaId, input);
     if (!completed) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
+    await this.requeueModeratedProduct(media.productId);
     await this.audit(principal, "catalog.media.activated", "Media", mediaId, requestId);
     return toVendorMedia(completed, storage);
   }
@@ -754,10 +800,48 @@ export class CatalogService {
     const media = await this.repository.findMedia(mediaId);
     if (!media) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
     await this.authorizeMedia(principal, media);
+    if (media.status === "DELETED") {
+      throw new CatalogError("MEDIA_DELETED", "Deleted media cannot be edited.", 409);
+    }
     const updated = await this.repository.updateMedia(mediaId, input);
     if (!updated) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
     await this.audit(principal, "catalog.media.updated", "Media", mediaId, requestId);
     return toVendorMedia(updated, this.mediaStorage);
+  }
+
+  async deleteMedia(
+    principal: AccessPrincipal,
+    mediaId: string,
+    requestId?: string,
+  ): Promise<VendorMediaDto> {
+    const storage = this.storageOrThrow();
+    const media = await this.repository.findMedia(mediaId);
+    if (!media) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
+    await this.authorizeMedia(principal, media);
+    if (media.bucket !== storage.bucket) {
+      throw new CatalogError("MEDIA_STORAGE_MISMATCH", "Media belongs to a different storage bucket.", 409);
+    }
+
+    const deleted =
+      media.status === "DELETED" ? media : await this.repository.deleteMedia(mediaId, new Date());
+    if (!deleted) throw new CatalogError("MEDIA_NOT_FOUND", "Media was not found.", 404);
+
+    // The database lifecycle state is made non-public first. If R2 deletion is
+    // temporarily unavailable the endpoint can be retried safely; R2 DELETE is
+    // idempotent and the record remains DELETED in the meantime.
+    try {
+      await storage.deleteObject(media.objectKey);
+    } catch {
+      throw new CatalogError(
+        "MEDIA_OBJECT_DELETE_FAILED",
+        "Media was detached from CartNest but object-storage deletion has not completed. Retry this operation.",
+        503,
+      );
+    }
+
+    await this.requeueModeratedProduct(media.productId);
+    await this.audit(principal, "catalog.media.deleted", "Media", mediaId, requestId);
+    return toVendorMedia(deleted, storage);
   }
 
   private async categoryScope(categoryId?: string): Promise<string[] | undefined> {
@@ -786,17 +870,23 @@ export class CatalogService {
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(query.pageSize ?? "20", 10)));
     const currency = query.currency ?? "NGN";
     assertNgCurrency(currency);
+
+    const search = query.q?.trim();
+    if (query.q !== undefined && !search) {
+      throw new CatalogError("INVALID_SEARCH_QUERY", "Search text cannot be blank.", 400);
+    }
+
     const minPriceMinor = query.minPriceMinor !== undefined ? BigInt(query.minPriceMinor) : undefined;
     const maxPriceMinor = query.maxPriceMinor !== undefined ? BigInt(query.maxPriceMinor) : undefined;
     if (minPriceMinor !== undefined && maxPriceMinor !== undefined && minPriceMinor > maxPriceMinor) {
       throw new CatalogError("INVALID_PRICE_RANGE", "Minimum price cannot exceed maximum price.", 400);
     }
+
+    const categoryIds = await this.categoryScope(query.categoryId);
     const result = await this.repository.listPublicCatalog({
-      ...(query.q ? { q: query.q.trim() } : {}),
+      ...(search ? { q: search } : {}),
       ...(query.storeId ? { storeId: query.storeId } : {}),
-      ...(await this.categoryScope(query.categoryId)
-        ? { categoryIds: await this.categoryScope(query.categoryId) }
-        : {}),
+      ...(categoryIds !== undefined ? { categoryIds } : {}),
       currency,
       ...(minPriceMinor !== undefined ? { minPriceMinor } : {}),
       ...(maxPriceMinor !== undefined ? { maxPriceMinor } : {}),
@@ -804,8 +894,13 @@ export class CatalogService {
       page,
       pageSize,
     });
+    const priceFilter: PublicPriceFilter = {
+      currency,
+      ...(minPriceMinor !== undefined ? { minPriceMinor } : {}),
+      ...(maxPriceMinor !== undefined ? { maxPriceMinor } : {}),
+    };
     return {
-      items: result.items.map((product) => toPublicSummary(product, this.mediaStorage)),
+      items: result.items.map((product) => toPublicSummary(product, this.mediaStorage, priceFilter)),
       pagination: {
         page,
         pageSize,
