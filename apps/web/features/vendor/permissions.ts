@@ -23,7 +23,8 @@ export const VENDOR_PERMISSION_GROUPS: readonly PermissionGroup[] = [
   {
     label: "Catalog",
     options: [
-      { value: "product:create", label: "Create products", description: "Create products and variants." },
+      { value: "product:create", label: "Create products", description: "Create products and their initial normalized variants." },
+      { value: "product:read", label: "View products", description: "View vendor product details, variants, media and publication state." },
       { value: "product:update", label: "Manage products", description: "Edit product, variant, and media details." },
       { value: "product:archive", label: "Archive products", description: "Remove products from active sale." },
     ],
