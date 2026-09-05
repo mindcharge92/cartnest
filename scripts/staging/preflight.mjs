@@ -1,0 +1,87 @@
+import { access, readdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+
+const checks = [];
+function record(name, passed, detail) {
+  checks.push({ name, passed, detail });
+}
+
+async function fileExists(path) {
+  try {
+    await access(path, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const requiredFiles = [
+  "deploy/staging/compose.yaml",
+  "deploy/staging/Caddyfile",
+  "deploy/staging/staging.env.example",
+  "deploy/docker/Dockerfile.web",
+  "deploy/docker/Dockerfile.api",
+  "deploy/docker/Dockerfile.worker",
+];
+for (const path of requiredFiles) {
+  record(`file:${path}`, await fileExists(resolve(path)), "required staging source artifact");
+}
+
+for (const command of ["docker", "node", "pnpm", "pg_dump", "pg_restore"]) {
+  const result = spawnSync(command, ["--version"], { encoding: "utf8" });
+  record(
+    `command:${command}`,
+    result.status === 0,
+    result.status === 0 ? (result.stdout || result.stderr).trim().split("\n")[0] : "not executable",
+  );
+}
+
+const migrationsRoot = resolve("packages/database/prisma/migrations");
+let migrationSqlFiles = [];
+try {
+  const entries = await readdir(migrationsRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const migrationSql = resolve(migrationsRoot, entry.name, "migration.sql");
+    if (await fileExists(migrationSql)) migrationSqlFiles.push(migrationSql);
+  }
+} catch {
+  // recorded below
+}
+record(
+  "prisma:migration-history",
+  migrationSqlFiles.length > 0,
+  migrationSqlFiles.length > 0
+    ? `${migrationSqlFiles.length} migration SQL file(s) found`
+    : "no executable Prisma migration exists yet; P12 clean-migration rehearsal is blocked",
+);
+
+const compose = spawnSync(
+  "docker",
+  ["compose", "-f", "deploy/staging/compose.yaml", "config", "--quiet"],
+  {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      STAGING_ENV_FILE: "staging.env.example",
+      POSTGRES_PASSWORD: "preflight-only-not-a-secret",
+    },
+  },
+);
+record(
+  "docker:compose-config",
+  compose.status === 0,
+  compose.status === 0 ? "staging compose parses" : (compose.stderr || compose.stdout).trim(),
+);
+
+const result = {
+  schemaVersion: 1,
+  exercise: "p12-staging-preflight",
+  recordedAt: new Date().toISOString(),
+  passed: checks.every((check) => check.passed),
+  checks,
+};
+console.log(JSON.stringify(result, null, 2));
+if (!result.passed) process.exitCode = 1;
