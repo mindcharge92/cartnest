@@ -1,23 +1,7 @@
 import { Type, type Static } from "typebox";
 import { IsoTimestampSchema, MoneySchema, PaginationMetaSchema, UuidSchema } from "./common.js";
-
-export const PaymentProviderSchema = Type.Union([
-  Type.Literal("PAYSTACK"),
-  Type.Literal("FLUTTERWAVE"),
-]);
-export type PaymentProviderDto = Static<typeof PaymentProviderSchema>;
-
-export const PaymentStatusSchema = Type.Union([
-  Type.Literal("PENDING"),
-  Type.Literal("REQUIRES_ACTION"),
-  Type.Literal("PROCESSING"),
-  Type.Literal("SUCCEEDED"),
-  Type.Literal("FAILED"),
-  Type.Literal("CANCELLED"),
-  Type.Literal("PARTIALLY_REFUNDED"),
-  Type.Literal("REFUNDED"),
-]);
-export type PaymentStatusDto = Static<typeof PaymentStatusSchema>;
+import { PaymentStatusSchema } from "./orders.js";
+import { PaymentProviderSchema } from "./vendor.js";
 
 export const PaymentChannelSchema = Type.Union([
   Type.Literal("card"),
