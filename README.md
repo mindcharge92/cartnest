@@ -2,11 +2,13 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current backend phase:** P8 — Logistics, Shipping Quotes, Shipments, and Tracking. Backend/domain source baselines for P0–P8 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P8 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
+**Current backend phase:** P9 — Returns, Refunds, and Reviews. Backend/domain source baselines for P0–P9 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P9 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
+
+P9 now establishes post-delivery ReturnRequest/ReturnItem workflows, partial/full refund safety, Paystack/Flutterwave refund adapter boundaries, refund reconciliation, explicit returned-stock restocking, verified-purchase product/store reviews, and admin review/refund controls. Provider refund sandbox evidence is still required before production.
 
 GIGL quoting/tracking have provider-adapter source baselines, while live GIGL shipment booking remains deliberately gated until CartNest's contracted preshipment request/response is verified in the provider sandbox rather than guessed from generic public documentation.
 
-See [`docs/implementation/p8-status.md`](docs/implementation/p8-status.md) for the current phase record.
+See [`docs/implementation/p9-status.md`](docs/implementation/p9-status.md) for the current phase record.
 
 ## Approved Stack
 
@@ -53,7 +55,7 @@ packages/
 
 Start with [`docs/README.md`](docs/README.md).
 
-The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, logistics, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
+The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, logistics, returns/refunds/reviews, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
 
 Implementation records currently exist for:
 
@@ -67,6 +69,7 @@ P5 Inventory/wishlist/cart
 P6 Checkout/reservations/multi-vendor orders
 P7 Payments/commission/webhooks/reconciliation
 P8 Logistics/shipping quotes/shipments/tracking
+P9 Returns/refunds/reviews
 ```
 
 ## Local Setup
