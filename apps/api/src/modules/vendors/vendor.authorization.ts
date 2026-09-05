@@ -23,6 +23,12 @@ export const ALL_VENDOR_PERMISSIONS: readonly VendorPermissionDto[] = [
   "provider-account:read",
 ] as const;
 
+const PRODUCT_PERMISSIONS_THAT_IMPLY_READ: readonly VendorPermissionDto[] = [
+  "product:create",
+  "product:update",
+  "product:archive",
+];
+
 export interface VendorMembershipContext {
   readonly id: string;
   readonly vendorId: string;
@@ -65,13 +71,21 @@ export function requireVendorOwner(membership: VendorMembershipContext): void {
   }
 }
 
+function staffHasPermission(membership: VendorMembershipContext, permission: VendorPermissionDto): boolean {
+  if (membership.permissions.includes(permission)) return true;
+  if (permission === "product:read") {
+    return PRODUCT_PERMISSIONS_THAT_IMPLY_READ.some((candidate) => membership.permissions.includes(candidate));
+  }
+  return false;
+}
+
 export function requireVendorPermission(
   membership: VendorMembershipContext,
   permission: VendorPermissionDto,
 ): void {
   requireActiveVendorMembership(membership);
   if (membership.role === "OWNER") return;
-  if (!membership.permissions.includes(permission)) {
+  if (!staffHasPermission(membership, permission)) {
     throw new VendorAuthorizationError(
       "VENDOR_PERMISSION_REQUIRED",
       `The ${permission} permission is required for this action.`,
@@ -85,7 +99,14 @@ export function effectiveVendorPermissions(
   if (membership.role === "OWNER" && membership.status === "ACTIVE") {
     return ALL_VENDOR_PERMISSIONS;
   }
-  return membership.permissions.filter((permission): permission is VendorPermissionDto =>
+  const explicit = membership.permissions.filter((permission): permission is VendorPermissionDto =>
     ALL_VENDOR_PERMISSIONS.includes(permission as VendorPermissionDto),
   );
+  if (
+    !explicit.includes("product:read") &&
+    PRODUCT_PERMISSIONS_THAT_IMPLY_READ.some((permission) => explicit.includes(permission))
+  ) {
+    return [...explicit, "product:read"];
+  }
+  return explicit;
 }
