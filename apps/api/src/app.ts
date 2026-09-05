@@ -23,6 +23,7 @@ import { PrismaCatalogRepository } from "./modules/catalog/catalog.repository.js
 import { registerCatalogRoutes } from "./modules/catalog/catalog.routes.js";
 import { CatalogService } from "./modules/catalog/catalog.service.js";
 import { R2MediaStorage } from "./modules/catalog/catalog.storage.js";
+import { asInventoryAvailabilityBoundary } from "./modules/inventory/inventory.public.js";
 import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { InventoryService } from "./modules/inventory/inventory.service.js";
@@ -140,13 +141,16 @@ export function buildApp(
     database && vendorBoundary && catalogBoundary
       ? new InventoryService(new PrismaInventoryRepository(database), vendorBoundary, catalogBoundary)
       : undefined;
+  const inventoryBoundary = inventoryService
+    ? asInventoryAvailabilityBoundary(inventoryService)
+    : undefined;
   const wishlistService =
     database && catalogBoundary
       ? new WishlistService(new PrismaWishlistRepository(database), catalogBoundary)
       : undefined;
   const cartService =
-    database && catalogBoundary && inventoryService
-      ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryService)
+    database && catalogBoundary && inventoryBoundary
+      ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryBoundary)
       : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
