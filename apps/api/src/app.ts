@@ -15,14 +15,24 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { PrismaAuthRepository } from "./modules/auth/auth.repository.js";
 import { registerAuthRoutes, registerSecurityPlugins } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
+import { PrismaCartRepository } from "./modules/cart/cart.repository.js";
+import { registerCartRoutes } from "./modules/cart/cart.routes.js";
+import { CartService } from "./modules/cart/cart.service.js";
+import { DefaultCatalogCommerceBoundary } from "./modules/catalog/catalog.public.js";
 import { PrismaCatalogRepository } from "./modules/catalog/catalog.repository.js";
 import { registerCatalogRoutes } from "./modules/catalog/catalog.routes.js";
 import { CatalogService } from "./modules/catalog/catalog.service.js";
 import { R2MediaStorage } from "./modules/catalog/catalog.storage.js";
+import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
+import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
+import { InventoryService } from "./modules/inventory/inventory.service.js";
 import { asVendorOwnershipBoundary } from "./modules/vendors/vendor.public.js";
 import { PrismaVendorRepository } from "./modules/vendors/vendor.repository.js";
 import { registerVendorRoutes } from "./modules/vendors/vendor.routes.js";
 import { VendorService } from "./modules/vendors/vendor.service.js";
+import { PrismaWishlistRepository } from "./modules/wishlist/wishlist.repository.js";
+import { registerWishlistRoutes } from "./modules/wishlist/wishlist.routes.js";
+import { WishlistService } from "./modules/wishlist/wishlist.service.js";
 
 export interface ReadinessProbes {
   readonly database: () => Promise<boolean>;
@@ -78,6 +88,9 @@ export function buildApp(
         { name: "vendors", description: "Vendor applications, stores, staff, KYC, and settlement account visibility" },
         { name: "catalog", description: "Categories, products, variants, search, and buyer catalog" },
         { name: "media", description: "Direct object-storage upload intents and media metadata" },
+        { name: "inventory", description: "Vendor-scoped stock, availability, and adjustment history" },
+        { name: "wishlist", description: "Authenticated buyer wishlist" },
+        { name: "cart", description: "Authenticated multi-store cart and checkout preview" },
         { name: "admin", description: "Privileged marketplace administration and moderation" },
       ],
     },
@@ -96,6 +109,7 @@ export function buildApp(
   const vendorService = database
     ? new VendorService(new PrismaVendorRepository(database))
     : undefined;
+  const vendorBoundary = vendorService ? asVendorOwnershipBoundary(vendorService) : undefined;
 
   const mediaStorage =
     environment.r2AccountId &&
@@ -112,18 +126,35 @@ export function buildApp(
         })
       : undefined;
 
+  const catalogRepository = database ? new PrismaCatalogRepository(database) : undefined;
   const catalogService =
-    database && vendorService
-      ? new CatalogService(
-          new PrismaCatalogRepository(database),
-          asVendorOwnershipBoundary(vendorService),
-          mediaStorage,
-        )
+    catalogRepository && vendorBoundary
+      ? new CatalogService(catalogRepository, vendorBoundary, mediaStorage)
+      : undefined;
+  const catalogBoundary =
+    catalogRepository && catalogService
+      ? new DefaultCatalogCommerceBoundary(catalogRepository, catalogService)
+      : undefined;
+
+  const inventoryService =
+    database && vendorBoundary && catalogBoundary
+      ? new InventoryService(new PrismaInventoryRepository(database), vendorBoundary, catalogBoundary)
+      : undefined;
+  const wishlistService =
+    database && catalogBoundary
+      ? new WishlistService(new PrismaWishlistRepository(database), catalogBoundary)
+      : undefined;
+  const cartService =
+    database && catalogBoundary && inventoryService
+      ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryService)
       : undefined;
 
   registerAuthRoutes(app, { service: authService, environment });
   registerVendorRoutes(app, { service: vendorService, authService });
   registerCatalogRoutes(app, { service: catalogService, authService });
+  registerInventoryRoutes(app, { service: inventoryService, authService });
+  registerWishlistRoutes(app, { service: wishlistService, authService });
+  registerCartRoutes(app, { service: cartService, authService });
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
