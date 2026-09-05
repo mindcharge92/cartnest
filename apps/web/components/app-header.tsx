@@ -7,7 +7,6 @@ import { useSession } from "./session-provider";
 export function AppHeader() {
   const pathname = usePathname();
   const { session, status, logout } = useSession();
-  const privileged = session?.user.platformRole === "ADMIN" || session?.user.platformRole === "SUPER_ADMIN";
 
   return (
     <header className="siteHeader">
@@ -26,11 +25,6 @@ export function AppHeader() {
               <Link className="navLink" aria-current={pathname.startsWith("/vendor") ? "page" : undefined} href="/vendor">
                 Seller
               </Link>
-              {privileged ? (
-                <Link className="navLink" aria-current={pathname.startsWith("/admin") ? "page" : undefined} href="/admin">
-                  Admin
-                </Link>
-              ) : null}
               <Link className="navLink" aria-current={pathname.startsWith("/account") ? "page" : undefined} href="/account">
                 Account
               </Link>
