@@ -1,0 +1,19 @@
+enum PrivacyRequestStatus {
+  PENDING
+  REQUIRES_REVIEW
+  COMPLETED
+  REJECTED
+}
+
+model PrivacyRequest {
+  id          String               @id @default(uuid()) @db.Uuid
+  userId      String               @db.Uuid
+  status      PrivacyRequestStatus @default(PENDING)
+  reviewNote  String?
+  requestedAt DateTime             @default(now()) @db.Timestamptz(3)
+  processedAt DateTime?            @db.Timestamptz(3)
+  processedBy String?              @db.Uuid
+
+  @@index([userId, status, requestedAt])
+  @@index([status, requestedAt])
+}
