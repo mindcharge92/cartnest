@@ -4,6 +4,7 @@ import {
   ApiErrorSchema,
   CreateShipmentBodySchema,
   FulfillmentProfileBodySchema,
+  LogisticsStationListResponseSchema,
   OrderIdParamsSchema,
   ShipmentIdParamsSchema,
   ShipmentListResponseSchema,
@@ -84,6 +85,15 @@ export function registerLogisticsRoutes(app: FastifyInstance, options: Logistics
       const principal = await requireAccessPrincipal(request, authOrThrow(options.authService));
       await serviceOrThrow(options.service).updateVariantProfile(principal, request.params.variantId, request.body);
       return reply.code(202).send({ accepted: true });
+    } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.get("/api/v1/logistics/stations", {
+    schema: { tags: ["logistics"], operationId: "listLogisticsStations", response: { 200: LogisticsStationListResponseSchema, ...errors } },
+  }, async (request, reply) => {
+    try {
+      await requireAccessPrincipal(request, authOrThrow(options.authService));
+      return reply.send(await serviceOrThrow(options.service).listStations());
     } catch (error) { return sendError(request, reply, error); }
   });
 
