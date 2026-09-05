@@ -30,6 +30,7 @@ model ShippingQuote {
   id                     String           @id @default(uuid()) @db.Uuid
   userId                 String           @db.Uuid
   cartId                 String           @db.Uuid
+  cartUpdatedAt          DateTime         @db.Timestamptz(3)
   storeId                String           @db.Uuid
   provider               ShipmentProvider
   amountMinor            BigInt
@@ -41,7 +42,7 @@ model ShippingQuote {
   metadata               Json?
   createdAt              DateTime         @default(now()) @db.Timestamptz(3)
 
-  @@index([userId, cartId, storeId, expiresAt])
+  @@index([userId, cartId, cartUpdatedAt, storeId, expiresAt])
   @@index([provider, expiresAt])
 }
 
