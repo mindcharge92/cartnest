@@ -2,11 +2,18 @@
 
 CartNest is a multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. The web pass now mirrors the backend phases so buyer, vendor and admin UI is integrated incrementally rather than postponed to one final frontend rewrite.
+**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP4**.
 
-The first frontend batch, **FP0–FP2**, establishes the responsive marketplace shell, shared loading/error states, secure typed-client browser transport, improved session handling, login/registration/recovery, contact verification, MFA and account-security interfaces.
+The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, the public catalog, normalized product/variant management, and Cloudflare R2 product-media integration.
 
-See [`docs/implementation/frontend-integration-plan.md`](docs/implementation/frontend-integration-plan.md) and [`docs/implementation/frontend-p0-p2-status.md`](docs/implementation/frontend-p0-p2-status.md).
+See:
+
+- [`docs/implementation/frontend-integration-plan.md`](docs/implementation/frontend-integration-plan.md)
+- [`docs/implementation/frontend-p0-p2-status.md`](docs/implementation/frontend-p0-p2-status.md)
+- [`docs/implementation/frontend-p3-status.md`](docs/implementation/frontend-p3-status.md)
+- [`docs/implementation/frontend-p4-status.md`](docs/implementation/frontend-p4-status.md)
+
+The next frontend phase is **FP5 — inventory, wishlist, and multi-store cart integration**.
 
 ## Approved Stack
 
@@ -51,15 +58,15 @@ packages/
 
 ## Implementation Tracks
 
-Backend/domain records exist for P0–P11, with P12 rehearsal tooling prepared. The frontend pass now proceeds as:
+Backend/domain records exist for P0–P11, with P12 rehearsal tooling prepared. The frontend pass proceeds as:
 
 ```text
-FP0  Web foundation / design system / app shell
-FP1  Typed API integration / shared states
-FP2  Identity / sessions / verification / MFA
-FP3  Vendor onboarding / stores / KYC / staff
-FP4  Marketplace catalog / products / media
-FP5  Inventory / wishlist / cart
+FP0  Web foundation / design system / app shell             ✅ source baseline
+FP1  Typed API integration / shared states                  ✅ source baseline
+FP2  Identity / sessions / verification / MFA               ✅ source baseline
+FP3  Vendor onboarding / stores / KYC / staff               ✅ source baseline
+FP4  Marketplace catalog / products / media                 ✅ source baseline
+FP5  Inventory / wishlist / cart                            NEXT
 FP6  Checkout / orders
 FP7  Payments
 FP8  Logistics / tracking
@@ -68,6 +75,8 @@ FP10 Admin / analytics / promotions / notifications
 FP11 Privacy / accessibility / security / performance
 FP12 End-to-end integration / UAT
 ```
+
+Source-baseline status does not mean CI/runtime validation has passed. GitHub Actions is still failing before any job is scheduled, so install/lint/typecheck/test/build and browser/staging evidence remain pending.
 
 ## Local Setup
 
