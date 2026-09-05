@@ -37,8 +37,19 @@ ALTER TABLE "TaxRate"
 
 ALTER TABLE "Promotion"
   ADD CONSTRAINT "Promotion_percentage_value_range"
-  CHECK ("type" <> 'PERCENTAGE' OR "value" BETWEEN 0 AND 10000),
+    CHECK ("type" <> 'PERCENTAGE' OR "value" BETWEEN 1 AND 10000),
+  ADD CONSTRAINT "Promotion_fixed_value_positive"
+    CHECK ("type" <> 'FIXED_AMOUNT' OR "value" > 0),
+  ADD CONSTRAINT "Promotion_min_order_nonnegative"
+    CHECK ("minOrderAmountMinor" IS NULL OR "minOrderAmountMinor" >= 0),
+  ADD CONSTRAINT "Promotion_max_redemptions_positive"
+    CHECK ("maxRedemptions" IS NULL OR "maxRedemptions" > 0),
+  ADD CONSTRAINT "Promotion_per_user_limit_positive"
+    CHECK ("perUserLimit" IS NULL OR "perUserLimit" > 0),
   ADD CONSTRAINT "Promotion_valid_period" CHECK ("endsAt" IS NULL OR "endsAt" > "startsAt");
+
+ALTER TABLE "PromotionRedemption"
+  ADD CONSTRAINT "PromotionRedemption_amount_positive" CHECK ("amountMinor" > 0);
 
 ALTER TABLE "CartItem"
   ADD CONSTRAINT "CartItem_quantity_positive" CHECK ("quantity" > 0);
@@ -178,6 +189,21 @@ ALTER TABLE "ProductReview"
 
 ALTER TABLE "StoreReview"
   ADD CONSTRAINT "StoreReview_rating_range" CHECK ("rating" BETWEEN 1 AND 5);
+
+-- P10 notification preference/read-state relations.
+ALTER TABLE "NotificationReceipt"
+  ADD CONSTRAINT "NotificationReceipt_notification_fk"
+    FOREIGN KEY ("notificationId") REFERENCES "Notification"("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "NotificationReceipt_user_fk"
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+
+ALTER TABLE "NotificationPreference"
+  ADD CONSTRAINT "NotificationPreference_user_fk"
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+
+CREATE INDEX "Notification_in_app_user_created_idx"
+  ON "Notification" ("userId", "createdAt" DESC)
+  WHERE "channel" = 'IN_APP';
 
 CREATE UNIQUE INDEX "WishlistItem_product_without_variant_unique"
   ON "WishlistItem" ("wishlistId", "productId")
