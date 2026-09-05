@@ -38,7 +38,7 @@ services:
     environment:
       NODE_ENV: production
     command: ["pnpm", "--filter", "@repo/database", "db:migrate:deploy"]
-    networks: [private]
+    networks: [private, egress]
 
   api:
     image: ${API_IMAGE}
