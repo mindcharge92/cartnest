@@ -12,6 +12,19 @@ export const ShipmentStatusSchema = Type.Union([
 ]);
 export type ShipmentStatusDto = Static<typeof ShipmentStatusSchema>;
 
+export const LogisticsStationSchema = Type.Object({
+  id: Type.Integer({ minimum: 1 }),
+  name: Type.String({ minLength: 1, maxLength: 240 }),
+  state: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]),
+}, { additionalProperties: false });
+export type LogisticsStationDto = Static<typeof LogisticsStationSchema>;
+
+export const LogisticsStationListResponseSchema = Type.Object({
+  provider: Type.Literal("GIGL"),
+  items: Type.Array(LogisticsStationSchema),
+}, { additionalProperties: false });
+export type LogisticsStationListResponseDto = Static<typeof LogisticsStationListResponseSchema>;
+
 export const FulfillmentProfileBodySchema = Type.Object({
   defaultProvider: ShipmentProviderSchema,
   manualDeliveryEnabled: Type.Boolean(),
