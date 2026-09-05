@@ -2,7 +2,7 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-The repository is now entering **P0 — Repository and Tooling Foundation**. Architecture, product, security, API, data, operational, and implementation documentation already exists under `docs/`; the application monorepo scaffold is being introduced according to that approved baseline.
+**Current phase:** P0 — Repository and Tooling Foundation. The P0 scaffold is implemented; automated exit-gate verification is currently blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. See [`docs/implementation/p0-status.md`](docs/implementation/p0-status.md).
 
 ## Approved Stack
 
@@ -25,6 +25,25 @@ The repository is now entering **P0 — Repository and Tooling Foundation**. Arc
 - Turborepo `2.10.12`
 - TypeScript `6.0.3`
 
+## Monorepo Baseline
+
+```text
+apps/
+  web/
+  api/
+  worker/
+
+packages/
+  contracts/
+  api-client/
+  database/
+  config/
+  ui/
+  testing/
+  eslint-config/
+  typescript-config/
+```
+
 ## Repository Documentation
 
 Start with [`docs/README.md`](docs/README.md).
@@ -32,8 +51,6 @@ Start with [`docs/README.md`](docs/README.md).
 The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
 
 ## P0 Local Setup
-
-After the P0 scaffold is complete, a fresh clone should use:
 
 ```bash
 corepack enable
@@ -47,6 +64,7 @@ pnpm dev
 Local services:
 
 - Web: `http://localhost:3000`
+- Web health: `http://localhost:3000/api/health`
 - API health: `http://localhost:4000/health`
 - API readiness: `http://localhost:4000/ready`
 - PostgreSQL: `127.0.0.1:5432`
@@ -59,8 +77,9 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm format:check
 pnpm docs:check
 ```
+
+`pnpm format` and `pnpm format:check` are also available for repository formatting.
 
 Production feature implementation must follow [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md) and the governing ADRs rather than framework defaults.
