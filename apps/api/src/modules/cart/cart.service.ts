@@ -9,7 +9,7 @@ import type {
 } from "@repo/contracts";
 import type { AccessPrincipal } from "../auth/auth.public.js";
 import type { CatalogCommerceBoundary, CommerceVariantContext } from "../catalog/catalog.public.js";
-import type { InventoryService } from "../inventory/inventory.service.js";
+import type { InventoryAvailabilityBoundary } from "../inventory/inventory.public.js";
 import type { CartItemRecord, CartRecord, CartRepository } from "./cart.repository.js";
 
 export class CartError extends Error {
@@ -32,7 +32,7 @@ export class CartService {
   constructor(
     private readonly repository: CartRepository,
     private readonly catalogBoundary: CatalogCommerceBoundary,
-    private readonly inventoryService: InventoryService,
+    private readonly inventoryBoundary: InventoryAvailabilityBoundary,
   ) {}
 
   private async mapAvailableItem(item: CartItemRecord): Promise<CartItemDto | null> {
@@ -42,7 +42,7 @@ export class CartService {
     if (!product) return null;
     const variant = product.variants.find((candidate) => candidate.id === item.variantId);
     if (!variant) return null;
-    const availability = await this.inventoryService.getAvailability(item.variantId);
+    const availability = await this.inventoryBoundary.getAvailability(item.variantId);
     return {
       id: item.id,
       quantity: item.quantity,
@@ -94,7 +94,7 @@ export class CartService {
   async addItem(principal: AccessPrincipal, input: AddCartItemBodyDto): Promise<CartResponseDto> {
     const variant = await this.catalogBoundary.findPurchasableVariant(input.variantId);
     if (!variant) throw new CartError("VARIANT_NOT_AVAILABLE", "This variant is not currently purchasable.", 409);
-    const availability = await this.inventoryService.getAvailability(input.variantId);
+    const availability = await this.inventoryBoundary.getAvailability(input.variantId);
     const cart = await this.repository.getOrCreateActive(principal.userId);
     const existing = await this.repository.findItemByVariant(cart.id, input.variantId);
     const nextQuantity = (existing?.quantity ?? 0) + input.quantity;
@@ -118,7 +118,7 @@ export class CartService {
     if (!item) throw new CartError("CART_ITEM_NOT_FOUND", "Cart item was not found.", 404);
     const variant = await this.catalogBoundary.findPurchasableVariant(item.variantId);
     if (!variant) throw new CartError("VARIANT_NOT_AVAILABLE", "This variant is not currently purchasable.", 409);
-    const availability = await this.inventoryService.getAvailability(item.variantId);
+    const availability = await this.inventoryBoundary.getAvailability(item.variantId);
     if (input.quantity > availability.available) {
       throw new CartError(
         "INSUFFICIENT_STOCK",
@@ -164,7 +164,7 @@ export class CartService {
     const groupTotals = new Map<string, { store: CheckoutPreviewStoreGroupDto["store"]; itemCount: number; subtotal: bigint }>();
     let subtotal = 0n;
     let itemCount = 0;
-    let currency = "NGN";
+    let currency: string | undefined;
 
     for (const item of cart.items) {
       const context = await this.catalogBoundary.findVariantContext(item.variantId);
@@ -178,7 +178,11 @@ export class CartService {
         issues.push({ cartItemId: item.id, code: "VARIANT_UNAVAILABLE", message: "The selected variant is not purchasable." });
         continue;
       }
-      const availability = await this.inventoryService.getAvailability(item.variantId);
+      if (currency && purchasable.currency !== currency) {
+        throw new CartError("CART_CURRENCY_MISMATCH", "Cart items must use one currency.", 409);
+      }
+      currency ??= purchasable.currency;
+      const availability = await this.inventoryBoundary.getAvailability(item.variantId);
       if (item.quantity > availability.available) {
         issues.push({
           cartItemId: item.id,
@@ -186,7 +190,6 @@ export class CartService {
           message: `Only ${availability.available} unit(s) are available for ${purchasable.productName}.`,
         });
       }
-      currency = purchasable.currency;
       const line = purchasable.priceAmountMinor * BigInt(item.quantity);
       subtotal += line;
       itemCount += item.quantity;
@@ -208,17 +211,18 @@ export class CartService {
       }
     }
 
+    const resolvedCurrency = currency ?? "NGN";
     const storeGroups: CheckoutPreviewStoreGroupDto[] = [...groupTotals.values()].map((group) => ({
       store: group.store,
       itemCount: group.itemCount,
-      subtotal: { amountMinor: group.subtotal.toString(), currency },
+      subtotal: { amountMinor: group.subtotal.toString(), currency: resolvedCurrency },
     }));
 
     return {
       cartId: cart.id,
       ready: cart.items.length > 0 && issues.length === 0,
-      currency,
-      subtotal: { amountMinor: subtotal.toString(), currency },
+      currency: resolvedCurrency,
+      subtotal: { amountMinor: subtotal.toString(), currency: resolvedCurrency },
       itemCount,
       storeGroups,
       issues,
