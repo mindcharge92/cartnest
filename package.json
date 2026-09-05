@@ -17,6 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:check": "node scripts/check-doc-links.mjs",
+    "security:scan": "node scripts/check-secrets.mjs",
+    "security:audit": "pnpm audit --audit-level high",
     "infra:up": "docker compose -f compose.dev.yml up -d",
     "infra:down": "docker compose -f compose.dev.yml down",
     "infra:logs": "docker compose -f compose.dev.yml logs -f",
@@ -24,6 +26,8 @@
     "db:format": "pnpm --filter @repo/database db:format",
     "db:validate": "pnpm --filter @repo/database db:validate",
     "db:migrate:dev": "pnpm --filter @repo/database db:migrate:dev",
+    "db:backup": "node scripts/operations/postgres-backup.mjs",
+    "db:restore": "node scripts/operations/postgres-restore.mjs",
     "openapi:generate": "pnpm --filter @repo/contracts build && pnpm --filter @repo/config build && pnpm --filter @repo/database build && pnpm --filter @cartnest/api openapi:generate",
     "api-client:generate": "pnpm --filter @repo/api-client generate",
     "api:generate": "pnpm openapi:generate && pnpm api-client:generate"
