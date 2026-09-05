@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   DeliveryAddressSnapshotDto,
   OrderStatusDto,
@@ -154,6 +155,13 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+export function isOpenUnpaidOrder(status: string, paymentStatus: string): boolean {
+  return (
+    paymentStatus === "PENDING" &&
+    (status === "PENDING_PAYMENT" || status === "PARTIALLY_CANCELLED")
+  );
+}
+
 function checkoutLine(row: CheckoutCartRecord["items"][number]): CheckoutDraftLine {
   const variant = row.variant;
   const product = variant.product;
@@ -199,7 +207,7 @@ function lineSignature(line: CheckoutDraftLine): string {
 
 function orderNumber(now: Date): string {
   const date = now.toISOString().slice(0, 10).replaceAll("-", "");
-  const random = crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase();
+  const random = randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase();
   return `CN-${date}-${random}`;
 }
 
@@ -632,7 +640,7 @@ export class PrismaOrderRepository implements OrderRepository {
         include: { paymentIntents: true },
       });
       if (!order) return false;
-      if (order.status !== "PENDING_PAYMENT" || order.paymentStatus !== "PENDING") {
+      if (!isOpenUnpaidOrder(order.status, order.paymentStatus)) {
         throw new Error("ORDER_NOT_CANCELLABLE");
       }
       await this.releaseHeldReservations(transaction, order.id, input.now, "RELEASED");
@@ -709,8 +717,7 @@ export class PrismaOrderRepository implements OrderRepository {
       });
       if (!vendorOrder) return false;
       if (
-        vendorOrder.order.status !== "PENDING_PAYMENT" ||
-        vendorOrder.order.paymentStatus !== "PENDING" ||
+        !isOpenUnpaidOrder(vendorOrder.order.status, vendorOrder.order.paymentStatus) ||
         !["PENDING", "ACCEPTED"].includes(vendorOrder.status)
       ) {
         throw new Error("VENDOR_ORDER_NOT_CANCELLABLE");
@@ -816,7 +823,7 @@ export class PrismaOrderRepository implements OrderRepository {
     for (const orderId of orderIds) {
       await this.database.$transaction(async (transaction) => {
         const order = await transaction.order.findUnique({ where: { id: orderId } });
-        if (!order || order.status !== "PENDING_PAYMENT") return;
+        if (!order || !isOpenUnpaidOrder(order.status, order.paymentStatus)) return;
         const before = await transaction.inventoryReservation.count({ where: { orderId, status: "HELD" } });
         await this.releaseHeldReservations(transaction, orderId, now, "EXPIRED");
         if (before === 0) return;
