@@ -103,6 +103,7 @@ export class GiglAdapter implements LogisticsProviderAdapter {
 
   constructor(
     private readonly accessToken: string,
+    private readonly customerCode: string,
     private readonly baseUrl: string,
   ) {}
 
@@ -116,21 +117,21 @@ export class GiglAdapter implements LogisticsProviderAdapter {
       },
       signal: AbortSignal.timeout(12_000),
     });
-    const body = await response.json().catch(() => ({}));
+    const responseBody = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`GIGL_HTTP_${response.status}`);
-    return body;
+    return responseBody;
   }
 
   async quote(input: LogisticsQuoteInput): Promise<LogisticsQuoteResult> {
     if (!input.senderStationId || !input.receiverStationId) throw new Error("GIGL_STATION_REQUIRED");
-    const body = {
+    const requestBody = {
       SenderStationId: input.senderStationId,
       ReceiverStationId: input.receiverStationId,
       VehicleType: 1,
       ReceiverLocation: { Address: addressText(input.destination), City: input.destination.city, State: input.destination.state },
       SenderLocation: { Address: addressText(input.origin), City: input.origin.city, State: input.origin.state },
       IsFromAgility: false,
-      CustomerCode: "CARTNEST",
+      CustomerCode: this.customerCode,
       CustomerType: 0,
       DeliveryOptionIds: [],
       PickUpOptions: 0,
@@ -143,7 +144,7 @@ export class GiglAdapter implements LogisticsProviderAdapter {
         Height: item.heightMm ? item.heightMm / 10 : undefined,
       })),
     };
-    const response = await this.request("price", { method: "POST", body: JSON.stringify(body) });
+    const response = await this.request("price", { method: "POST", body: JSON.stringify(requestBody) });
     const data = response && typeof response === "object" && "Object" in response ? (response as { Object?: unknown }).Object : response;
     const amountNaira = firstNumber(data, ["GrandTotal", "Total", "Price", "Amount", "ShippingCost"]);
     if (amountNaira === null || amountNaira < 0) throw new Error("GIGL_QUOTE_UNMAPPABLE");
