@@ -5,6 +5,7 @@ import { SessionProvider } from "../components/session-provider";
 import "./globals.css";
 import "./vendor.css";
 import "./catalog.css";
+import "./commerce.css";
 
 export const metadata: Metadata = {
   title: {
