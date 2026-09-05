@@ -55,7 +55,13 @@ function VendorStaff() {
   if (state === "error" || !access) return <ErrorState title="Vendor workspace unavailable" message={error ?? "CartNest could not load this vendor."} action={<button className="secondaryButton" onClick={() => void reload()}>Try again</button>} />;
   if (!canRead) return <ErrorState title="Staff access restricted" message="Your vendor membership does not include permission to view staff." />;
 
+  function canDelegate(permission: VendorPermissionDto): boolean {
+    if (!access) return false;
+    return access.membership.role === "OWNER" || access.membership.permissions.includes(permission);
+  }
+
   function togglePermission(permission: VendorPermissionDto) {
+    if (!canDelegate(permission)) return;
     setPermissions((current) => current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]);
   }
 
@@ -91,18 +97,26 @@ function VendorStaff() {
 
         {canInvite ? (
           <form className="panel sellerForm" onSubmit={invite}>
-            <div className="sectionHeadingCompact"><div><h2>Invite staff member</h2><p>The user must already have a CartNest account matching the email or phone identifier.</p></div></div>
+            <div className="sectionHeadingCompact"><div><h2>Invite staff member</h2><p>The user must already have a CartNest account matching the email or phone identifier. Staff inviters can delegate only permissions they already hold.</p></div></div>
             <label className="field">Email or phone<input value={identifier} onChange={(event) => setIdentifier(event.target.value)} minLength={3} maxLength={320} required /></label>
             <div className="permissionGroups">
               {VENDOR_PERMISSION_GROUPS.map((group) => (
                 <fieldset className="permissionGroup" key={group.label} disabled={busy}>
                   <legend>{group.label}</legend>
-                  {group.options.map((option) => (
-                    <label className="permissionOption" key={option.value}>
-                      <input type="checkbox" checked={permissions.includes(option.value)} onChange={() => togglePermission(option.value)} />
-                      <span><strong>{option.label}</strong><small>{option.description}</small></span>
-                    </label>
-                  ))}
+                  {group.options.map((option) => {
+                    const delegatable = canDelegate(option.value);
+                    return (
+                      <label className="permissionOption" key={option.value}>
+                        <input
+                          type="checkbox"
+                          checked={permissions.includes(option.value)}
+                          disabled={!delegatable || busy}
+                          onChange={() => togglePermission(option.value)}
+                        />
+                        <span><strong>{option.label}</strong><small>{option.description}{!delegatable ? " You cannot delegate this permission." : ""}</small></span>
+                      </label>
+                    );
+                  })}
                 </fieldset>
               ))}
             </div>
@@ -112,7 +126,7 @@ function VendorStaff() {
         ) : null}
 
         <section className="workspaceSection">
-          <div className="sectionHeadingCompact"><div><h2>Members</h2><p>Changes are subject to the backend's final-owner and membership-state safeguards.</p></div></div>
+          <div className="sectionHeadingCompact"><div><h2>Members</h2><p>Changes are subject to the backend's self-change, role-delegation, invitation, and final-owner safeguards.</p></div></div>
           {listState === "loading" ? <LoadingState label="Loading staff members…" /> : null}
           {listState === "error" ? <ErrorState title="Staff list unavailable" message={message ?? "CartNest could not load vendor members."} action={<button className="secondaryButton" onClick={() => void load()}>Try again</button>} /> : null}
           {listState === "ready" && members.length === 0 ? <EmptyState title="No vendor members" message="No active or invited vendor members were returned." /> : null}
