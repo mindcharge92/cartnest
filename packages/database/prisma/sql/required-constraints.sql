@@ -59,6 +59,9 @@ ALTER TABLE "Order"
       "itemSubtotalAmountMinor" - "discountAmountMinor" + "deliveryAmountMinor" + "taxAmountMinor"
     );
 
+CREATE UNIQUE INDEX "VendorOrder_one_per_order_store"
+  ON "VendorOrder" ("orderId", "storeId");
+
 ALTER TABLE "VendorOrder"
   ADD CONSTRAINT "VendorOrder_itemSubtotal_nonnegative" CHECK ("itemSubtotalAmountMinor" >= 0),
   ADD CONSTRAINT "VendorOrder_discount_nonnegative" CHECK ("discountAmountMinor" >= 0),
