@@ -138,7 +138,6 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Order is always the first concurrency lock for payment/cancellation state.
   PERFORM 1 FROM "Order" WHERE "id" = parent_order_id FOR UPDATE;
 
   SELECT
@@ -315,6 +314,60 @@ ALTER TABLE "ShipmentItem"
   ADD CONSTRAINT "ShipmentItem_order_item_fk"
     FOREIGN KEY ("orderItemId") REFERENCES "OrderItem"("id") ON DELETE RESTRICT,
   ADD CONSTRAINT "ShipmentItem_quantity_positive" CHECK ("quantity" > 0);
+
+-- Cumulative ShipmentItem quantity is a cross-row invariant and cannot be
+-- expressed as a CHECK constraint. Serialize allocations on VendorOrder so two
+-- concurrent shipment requests cannot both consume the same final units.
+CREATE OR REPLACE FUNCTION "CartNest_guard_shipment_item_allocation"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  parent_vendor_order_id uuid;
+  ordered_quantity integer;
+  already_allocated integer;
+BEGIN
+  SELECT s."vendorOrderId"
+  INTO parent_vendor_order_id
+  FROM "Shipment" s
+  WHERE s."id" = NEW."shipmentId";
+
+  IF parent_vendor_order_id IS NULL THEN
+    RAISE EXCEPTION 'VENDOR_ORDER_NOT_FOUND';
+  END IF;
+
+  PERFORM 1 FROM "VendorOrder" WHERE "id" = parent_vendor_order_id FOR UPDATE;
+
+  SELECT oi."quantity"
+  INTO ordered_quantity
+  FROM "OrderItem" oi
+  WHERE oi."id" = NEW."orderItemId"
+    AND oi."vendorOrderId" = parent_vendor_order_id;
+
+  IF ordered_quantity IS NULL THEN
+    RAISE EXCEPTION 'ORDER_ITEM_NOT_FOUND';
+  END IF;
+
+  SELECT COALESCE(SUM(si."quantity"), 0)::integer
+  INTO already_allocated
+  FROM "ShipmentItem" si
+  JOIN "Shipment" s ON s."id" = si."shipmentId"
+  WHERE s."vendorOrderId" = parent_vendor_order_id
+    AND s."status" <> 'CANCELLED'
+    AND si."orderItemId" = NEW."orderItemId";
+
+  IF already_allocated + NEW."quantity" > ordered_quantity THEN
+    RAISE EXCEPTION 'SHIPMENT_QUANTITY_EXCEEDED';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "ShipmentItem_guard_order_quantity"
+BEFORE INSERT ON "ShipmentItem"
+FOR EACH ROW
+EXECUTE FUNCTION "CartNest_guard_shipment_item_allocation"();
 
 -- P9 returns/refunds/reviews constraints.
 ALTER TABLE "ReturnItem"
