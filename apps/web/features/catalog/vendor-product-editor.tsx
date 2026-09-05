@@ -10,13 +10,12 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
-import { apiErrorMessage, catalogApi } from "../../lib/api";
+import { apiErrorMessage, catalogApi, vendorApi } from "../../lib/api";
 import { hasVendorPermission } from "../vendor/permissions";
 import { useVendorAccess } from "../vendor/use-vendor-access";
 import { VendorStatusPill, VendorWorkspaceShell } from "../vendor/vendor-workspace-shell";
 import {
   categoryLabels,
-  formatMoney,
   minorToNairaInput,
   parseNairaToMinor,
   slugifyProduct,
@@ -50,6 +49,11 @@ function VariantEditor({
       setMessage("Enter a valid NGN price with at most two decimal places.");
       return;
     }
+    if (!sku.trim()) {
+      setMessage("SKU cannot be empty.");
+      return;
+    }
+
     const body: UpdateProductVariantBodyDto = {};
     if (sku.trim() !== variant.sku) body.sku = sku.trim();
     if (amountMinor !== variant.price.amountMinor) body.price = { amountMinor, currency: "NGN" };
@@ -58,6 +62,7 @@ function VariantEditor({
       setMessage("No variant changes to save.");
       return;
     }
+
     setBusy(true);
     setMessage(null);
     try {
@@ -77,7 +82,10 @@ function VariantEditor({
       <td><input aria-label={`SKU for ${variant.sku}`} value={sku} onChange={(event) => setSku(event.target.value)} maxLength={100} disabled={!canUpdate || busy} /></td>
       <td><input aria-label={`Price for ${variant.sku}`} inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} disabled={!canUpdate || busy} /></td>
       <td><select aria-label={`Status for ${variant.sku}`} value={status} onChange={(event) => setStatus(event.target.value as ProductVariantDto["status"])} disabled={!canUpdate || busy}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></td>
-      <td>{canUpdate ? <button className="secondaryButton compactButton" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</button> : null}{message ? <small className="tableMessage">{message}</small> : null}</td>
+      <td>
+        {canUpdate ? <button className="secondaryButton compactButton" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</button> : null}
+        {message ? <small className="tableMessage" role="status">{message}</small> : null}
+      </td>
     </tr>
   );
 }
@@ -96,13 +104,24 @@ function MediaCard({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    setAltText(media.altText ?? "");
+    setDisplayOrder(String(media.displayOrder));
+  }, [media]);
+
   async function save() {
+    const parsedOrder = Number(displayOrder);
+    if (!Number.isInteger(parsedOrder) || parsedOrder < -100000 || parsedOrder > 100000) {
+      setMessage("Display order must be a whole number between -100000 and 100000.");
+      return;
+    }
+
     setBusy(true);
     setMessage(null);
     try {
       await catalogApi.updateMedia(media.id, {
         altText: altText.trim() || null,
-        displayOrder: Number.parseInt(displayOrder || "0", 10),
+        displayOrder: parsedOrder,
       });
       await onChanged();
       setMessage("Image metadata updated.");
@@ -134,7 +153,7 @@ function MediaCard({
       <div className="mediaEditorBody">
         <div className="sellerCardTopline"><VendorStatusPill status={media.status} /><span>{media.originalFilename ?? media.mimeType}</span></div>
         <label className="field">Alt text<input value={altText} onChange={(event) => setAltText(event.target.value)} maxLength={300} disabled={!canUpdate || busy} /></label>
-        <label className="field">Display order<input type="number" value={displayOrder} onChange={(event) => setDisplayOrder(event.target.value)} disabled={!canUpdate || busy} /></label>
+        <label className="field">Display order<input type="number" min={-100000} max={100000} value={displayOrder} onChange={(event) => setDisplayOrder(event.target.value)} disabled={!canUpdate || busy} /></label>
         {message ? <p className="formMessage" role="status">{message}</p> : null}
         {canUpdate ? <div className="actionRow"><button className="secondaryButton" type="button" disabled={busy} onClick={() => void save()}>Save image</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void remove()}>Delete image</button></div> : null}
       </div>
@@ -159,21 +178,25 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
   const [file, setFile] = useState<File | null>(null);
   const [fileAlt, setFileAlt] = useState("");
 
+  const canReadStores = access ? hasVendorPermission(access, "store:read") : false;
   const canRead = access ? hasVendorPermission(access, "product:read") : false;
   const canUpdate = access ? hasVendorPermission(access, "product:update") : false;
   const canArchive = access ? hasVendorPermission(access, "product:archive") : false;
   const labels = useMemo(() => categoryLabels(categories), [categories]);
 
   const load = useCallback(async () => {
-    if (!access || !canRead) return;
+    if (!access || !canRead || !canReadStores) return;
     setState("loading");
     setMessage(null);
     try {
-      const [nextProduct, categoryResponse] = await Promise.all([
+      const [nextProduct, categoryResponse, storeResponse] = await Promise.all([
         catalogApi.getVendorProduct(productId),
         catalogApi.listCategories(),
+        vendorApi.listStores(vendorId),
       ]);
-      if (nextProduct.storeId && access.vendor.id !== vendorId) throw new Error("Vendor route mismatch.");
+      if (!storeResponse.items.some((store) => store.id === nextProduct.storeId)) {
+        throw new Error("This product does not belong to the selected vendor workspace.");
+      }
       setProduct(nextProduct);
       setCategories(categoryResponse.items);
       setName(nextProduct.name);
@@ -183,28 +206,40 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       setNewSelections(Object.fromEntries(nextProduct.options.map((option) => [option.id, option.values[0]?.id ?? ""])));
       setState("ready");
     } catch (caught) {
-      setMessage(apiErrorMessage(caught, "CartNest could not load this product."));
+      setMessage(caught instanceof Error ? caught.message : apiErrorMessage(caught, "CartNest could not load this product."));
       setState("error");
     }
-  }, [access, canRead, productId, vendorId]);
+  }, [access, canRead, canReadStores, productId, vendorId]);
 
   useEffect(() => { void load(); }, [load]);
 
   if (accessState === "loading") return <LoadingState label="Loading product workspace…" />;
   if (accessState === "error" || !access) return <ErrorState title="Vendor workspace unavailable" message={accessError ?? "CartNest could not load this vendor."} action={<button className="secondaryButton" type="button" onClick={() => void reloadAccess()}>Try again</button>} />;
-  if (!canRead) return <ErrorState title="Product access restricted" message="Your vendor membership does not include product:read." />;
+  if (!canRead || !canReadStores) return <ErrorState title="Product access restricted" message="This workspace requires product:read and store:read so the product can be verified against the selected vendor's stores." />;
   if (state === "loading") return <LoadingState label="Loading product…" />;
   if (state === "error" || !product) return <ErrorState title="Product unavailable" message={message ?? "CartNest could not load this product."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} />;
+
+  const isPublic = product.status === "ACTIVE" && ["NOT_REQUIRED", "APPROVED"].includes(product.moderationStatus);
 
   async function saveMetadata(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canUpdate) return;
+    const nextSlug = slugifyProduct(slug);
+    if (nextSlug.length < 2) {
+      setMessage("Product slug must contain at least two valid characters.");
+      return;
+    }
+    if (!name.trim() || !description.trim()) {
+      setMessage("Product name and description are required.");
+      return;
+    }
+
     setBusy(true);
     setMessage(null);
     try {
       const updated = await catalogApi.updateProduct(product.id, {
         name: name.trim(),
-        slug: slugifyProduct(slug),
+        slug: nextSlug,
         description: description.trim(),
         categoryId: categoryId || null,
       });
@@ -258,6 +293,10 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       setMessage("Enter a valid NGN price for the new variant.");
       return;
     }
+    if (!newSku.trim()) {
+      setMessage("Enter an SKU for the new variant.");
+      return;
+    }
     const optionValueIds = product.options.map((option) => newSelections[option.id]).filter((value): value is string => Boolean(value));
     if (optionValueIds.length !== product.options.length) {
       setMessage("Select one value for every product option.");
@@ -274,7 +313,7 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       setNewSku("");
       setNewPrice("");
       await load();
-      setMessage("Variant added.");
+      setMessage("Variant added. Moderation status may have been re-evaluated.");
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not add this variant."));
     } finally {
@@ -294,7 +333,7 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       const input = document.getElementById("product-image-file") as HTMLInputElement | null;
       if (input) input.value = "";
       await load();
-      setMessage("Product image uploaded and verified.");
+      setMessage("Product image uploaded and verified against its declared type.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "CartNest could not upload this image.");
     } finally {
@@ -316,7 +355,10 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
 
         <section className="productEditorStack">
           <form className="panel sellerForm" onSubmit={saveMetadata}>
-            <div className="sectionHeadingCompact"><div><h2>Product details</h2><p>If a moderated product changes, CartNest now returns it to PENDING instead of preserving stale approval.</p></div><Link className="textButton" href={`/products/${encodeURIComponent(product.id)}`}>View public page</Link></div>
+            <div className="sectionHeadingCompact">
+              <div><h2>Product details</h2><p>If a moderated product changes, CartNest returns it to PENDING instead of preserving stale approval.</p></div>
+              {isPublic ? <Link className="textButton" href={`/products/${encodeURIComponent(product.id)}`}>View public page</Link> : <span className="statusPill">Not public</span>}
+            </div>
             <div className="formGrid formGridTwo">
               <label className="field">Name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={200} disabled={!canUpdate || busy} /></label>
               <label className="field">Slug<input value={slug} onChange={(event) => setSlug(slugifyProduct(event.target.value))} minLength={2} maxLength={160} disabled={!canUpdate || busy} /></label>
@@ -330,7 +372,7 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
             <div className="sectionHeadingCompact"><div><h2>Options & variants</h2><p>Options are fixed after initial product creation in the current API. New variants may use only existing option values.</p></div></div>
             {product.options.length > 0 ? <div className="optionSnapshot">{product.options.map((option) => <div key={option.id}><strong>{option.name}</strong><span>{option.values.map((value) => value.value).join(", ")}</span></div>)}</div> : <p className="formMessage">This product uses one standard variant and no option dimensions.</p>}
             <div className="variantCreateTableWrap">
-              <table className="dataTable variantCreateTable"><thead><tr><th>Variant</th><th>SKU</th><th>NGN price</th><th>Status</th><th>Action</th></tr></thead><tbody>{product.variants.map((variant) => <VariantEditor key={variant.id} variant={variant} canUpdate={canUpdate} onSaved={(updated) => setProduct((current) => current ? { ...current, variants: current.variants.map((item) => item.id === updated.id ? updated : item) } : current)} />)}</tbody></table>
+              <table className="dataTable variantCreateTable"><thead><tr><th>Variant</th><th>SKU</th><th>NGN price</th><th>Status</th><th>Action</th></tr></thead><tbody>{product.variants.map((variant) => <VariantEditor key={variant.id} variant={variant} canUpdate={canUpdate} onSaved={() => void load()} />)}</tbody></table>
             </div>
 
             {canUpdate && canAddVariant ? (
@@ -344,9 +386,9 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
           </section>
 
           <section className="panel sellerForm">
-            <div className="sectionHeadingCompact"><div><h2>Product images</h2><p>JPEG, PNG and WebP up to 10 MB. The API now verifies actual image signatures after the direct R2 upload.</p></div></div>
+            <div className="sectionHeadingCompact"><div><h2>Product images</h2><p>JPEG, PNG and WebP up to 10 MB. The API verifies stored image signatures after direct R2 upload.</p></div></div>
             {canUpdate ? <form className="mediaUploadForm" onSubmit={upload}><label className="field">Image<input id="product-image-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required /></label><label className="field">Alt text<input value={fileAlt} onChange={(event) => setFileAlt(event.target.value)} maxLength={300} placeholder="Describe the product image" /></label><button className="secondaryButton" disabled={busy || !file}>{busy ? "Uploading…" : "Upload image"}</button></form> : null}
-            <div className="mediaEditorGrid">{product.media.filter((media) => media.status !== "DELETED").map((media) => <MediaCard key={media.id} media={media} canUpdate={canUpdate} onChanged={load} />)}</div>
+            {product.media.filter((media) => media.status !== "DELETED").length === 0 ? <p className="formMessage">No product images have been uploaded yet.</p> : <div className="mediaEditorGrid">{product.media.filter((media) => media.status !== "DELETED").map((media) => <MediaCard key={media.id} media={media} canUpdate={canUpdate} onChanged={load} />)}</div>}
           </section>
         </section>
       </VendorWorkspaceShell>
