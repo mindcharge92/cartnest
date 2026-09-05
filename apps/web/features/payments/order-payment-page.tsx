@@ -21,6 +21,8 @@ const CHANNELS: readonly { value: "" | PaymentChannelDto; label: string }[] = [
   { value: "bank_transfer", label: "Bank transfer" },
 ] as const;
 
+const ACTIVE_ATTEMPT_STATUSES = new Set(["PENDING", "REQUIRES_ACTION", "PROCESSING"]);
+
 function safeAuthorizationUrl(value: string): string {
   const url = new URL(value);
   const localHttp =
@@ -39,11 +41,17 @@ function reservationExpired(order: OrderDto): boolean {
   );
 }
 
+function hasActiveAttempt(intent: PaymentIntentDetailDto): boolean {
+  return intent.attempts.some((attempt) => ACTIVE_ATTEMPT_STATUSES.has(attempt.status));
+}
+
 function canCreateAttempt(order: OrderDto, intent: PaymentIntentDetailDto): boolean {
   return (
     order.paymentStatus === "PENDING" &&
     ["PENDING_PAYMENT", "PARTIALLY_CANCELLED"].includes(order.status) &&
+    Boolean(order.reservationExpiresAt) &&
     !reservationExpired(order) &&
+    !hasActiveAttempt(intent) &&
     ["PENDING", "FAILED"].includes(intent.status)
   );
 }
@@ -83,11 +91,14 @@ export function OrderPaymentPage({ orderId }: Readonly<{ orderId: string }>) {
       const nextOrder = await ordersApi.get(order.id);
       setIntent(nextIntent);
       setOrder(nextOrder);
+      if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(nextIntent.status)) {
+        clearPaymentInitializationKey(window.sessionStorage, intent.id, channel || undefined);
+      }
       if (nextIntent.status === "SUCCEEDED" && nextOrder.status === "PAID") {
         setMessage("Payment has been verified and the order is released for fulfillment.");
       } else if (nextIntent.status === "SUCCEEDED") {
         setMessage("Payment has been verified, but the order was not released for fulfillment. CartNest has flagged it for operational review.");
-      } else if (["PROCESSING", "REQUIRES_ACTION"].includes(nextIntent.status)) {
+      } else if (["PROCESSING", "REQUIRES_ACTION", "PENDING"].includes(nextIntent.status) && hasActiveAttempt(nextIntent)) {
         setMessage("The provider has not supplied a final verified result yet. Do not start another charge while this attempt is active.");
       } else if (nextIntent.status === "FAILED") {
         setMessage("The last payment attempt failed without a successful charge. If the inventory reservation is still valid, you can start a new attempt.");
@@ -115,7 +126,7 @@ export function OrderPaymentPage({ orderId }: Readonly<{ orderId: string }>) {
         key,
       );
       const authorizationUrl = safeAuthorizationUrl(response.authorizationUrl);
-      storePaymentReturnContext(storage, intent.id, order.id);
+      storePaymentReturnContext(storage, intent.id, order.id, selectedChannel);
       window.location.assign(authorizationUrl);
     } catch (caught) {
       const code = apiErrorCode(caught);
@@ -149,7 +160,7 @@ export function OrderPaymentPage({ orderId }: Readonly<{ orderId: string }>) {
   }
 
   const expired = reservationExpired(order);
-  const activeAttempt = ["REQUIRES_ACTION", "PROCESSING"].includes(intent.status);
+  const activeAttempt = hasActiveAttempt(intent);
   const payable = canCreateAttempt(order, intent);
   const paidAndReleased = order.paymentStatus === "SUCCEEDED" && order.status === "PAID";
   const paidNeedsReview = order.paymentStatus === "SUCCEEDED" && order.status !== "PAID";
@@ -189,6 +200,12 @@ export function OrderPaymentPage({ orderId }: Readonly<{ orderId: string }>) {
               <p>CartNest verified the provider payment but did not release fulfillment. This can happen when inventory reservation or financial-allocation safety checks fail.</p>
               <Link className="secondaryButton" href={`/orders/${encodeURIComponent(order.id)}`}>View order status</Link>
             </div>
+          ) : activeAttempt ? (
+            <div className="paymentOutcome paymentOutcomeWarning">
+              <strong>Payment verification in progress</strong>
+              <p>{expired ? "The inventory deadline has passed while a provider attempt is still unresolved. Do not create another charge or cancel this order until CartNest reconciles the provider result." : "A provider attempt is active. Do not create another charge or cancel this order until CartNest has a final verified result."}</p>
+              <button className="secondaryButton" type="button" disabled={busy !== null} onClick={() => void reconcile()}>{busy === "reconcile" ? "Checking…" : "Check payment status"}</button>
+            </div>
           ) : expired ? (
             <div className="paymentOutcome paymentOutcomeDanger">
               <strong>Inventory reservation expired</strong>
@@ -211,10 +228,10 @@ export function OrderPaymentPage({ orderId }: Readonly<{ orderId: string }>) {
                 </div>
               ) : null}
 
-              {activeAttempt || intent.status === "FAILED" ? (
+              {intent.status === "FAILED" ? (
                 <div className="paymentReconcileBox">
-                  <strong>{activeAttempt ? "Payment attempt needs verification" : "Previous attempt failed"}</strong>
-                  <p>{activeAttempt ? "Do not start another charge while the current attempt is unresolved. Ask CartNest to verify the provider state." : "A failed attempt can be retried only while the order reservation remains valid."}</p>
+                  <strong>Previous attempt failed</strong>
+                  <p>A failed attempt can be retried only while the order reservation remains valid.</p>
                   <button className="secondaryButton" type="button" disabled={busy !== null} onClick={() => void reconcile()}>{busy === "reconcile" ? "Checking…" : "Check payment status"}</button>
                 </div>
               ) : null}
