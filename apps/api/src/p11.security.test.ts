@@ -26,6 +26,18 @@ describe("P11 security hardening", () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/privacy/export" });
     expect(response.headers["cache-control"]).toBe("no-store");
   });
+
+  it("does not expose unexpected error details in the HTTP response", async () => {
+    const app = buildHardenedApp({ logger: false }, readyProbes);
+    apps.push(app);
+    app.get("/__p11/error", async () => {
+      throw new Error("provider-secret-value-must-not-leak");
+    });
+    const response = await app.inject({ method: "GET", url: "/__p11/error" });
+    expect(response.statusCode).toBe(500);
+    expect(response.body).not.toContain("provider-secret-value-must-not-leak");
+    expect(response.json()).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+  });
 });
 
 describe("P11 privacy contract surface", () => {
