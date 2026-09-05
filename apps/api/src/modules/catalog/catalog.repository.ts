@@ -216,6 +216,16 @@ const PUBLIC_MODERATION_STATUSES: ModerationStatusDto[] = ["NOT_REQUIRED", "APPR
 export class PrismaCatalogRepository implements CatalogRepository {
   constructor(private readonly database: DatabaseClient) {}
 
+  private async requeueProductModeration(
+    productId: string,
+    transaction: Prisma.TransactionClient = this.database,
+  ): Promise<void> {
+    await transaction.product.updateMany({
+      where: { id: productId, moderationStatus: { not: "NOT_REQUIRED" } },
+      data: { moderationStatus: "PENDING", status: "DRAFT" },
+    });
+  }
+
   async listCategories(status?: CategoryStatus): Promise<CategoryRecord[]> {
     return this.database.category.findMany({
       where: status ? { status } : undefined,
@@ -420,6 +430,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
           data: input.optionValueIds.map((optionValueId) => ({ variantId: variant.id, optionValueId })),
         });
       }
+      await this.requeueProductModeration(productId, transaction);
       return variant.id;
     });
     const created = await this.findVariant(variantId);
@@ -432,18 +443,22 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async updateVariant(variantId: string, input: UpdateProductVariantBodyDto): Promise<VariantRecord | null> {
-    if (!(await this.findVariant(variantId))) return null;
-    return this.database.productVariant.update({
-      where: { id: variantId },
-      data: {
-        ...(input.sku !== undefined ? { sku: input.sku } : {}),
-        ...(input.price !== undefined
-          ? { priceAmountMinor: BigInt(input.price.amountMinor), currency: input.price.currency }
-          : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
-      },
-      include: variantInclude,
+    const existing = await this.findVariant(variantId);
+    if (!existing) return null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.productVariant.update({
+        where: { id: variantId },
+        data: {
+          ...(input.sku !== undefined ? { sku: input.sku } : {}),
+          ...(input.price !== undefined
+            ? { priceAmountMinor: BigInt(input.price.amountMinor), currency: input.price.currency }
+            : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+        },
+      });
+      await this.requeueProductModeration(existing.productId, transaction);
     });
+    return this.findVariant(variantId);
   }
 
   async createPendingMedia(input: {
@@ -497,15 +512,19 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async updateMedia(mediaId: string, input: UpdateMediaBodyDto): Promise<MediaRecord | null> {
-    if (!(await this.findMedia(mediaId))) return null;
-    return this.database.media.update({
-      where: { id: mediaId },
-      data: {
-        ...(input.altText !== undefined ? { altText: input.altText } : {}),
-        ...(input.displayOrder !== undefined ? { displayOrder: input.displayOrder } : {}),
-      },
-      include: { product: { select: { storeId: true } } },
+    const existing = await this.findMedia(mediaId);
+    if (!existing) return null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.media.update({
+        where: { id: mediaId },
+        data: {
+          ...(input.altText !== undefined ? { altText: input.altText } : {}),
+          ...(input.displayOrder !== undefined ? { displayOrder: input.displayOrder } : {}),
+        },
+      });
+      if (existing.productId) await this.requeueProductModeration(existing.productId, transaction);
     });
+    return this.findMedia(mediaId);
   }
 
   async deleteMedia(mediaId: string, now: Date): Promise<MediaRecord | null> {
