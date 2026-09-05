@@ -29,6 +29,15 @@ export interface CartRepository {
 
 const includeItems = { items: { orderBy: { createdAt: "asc" as const } } } as const;
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002",
+  );
+}
+
 export class PrismaCartRepository implements CartRepository {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -43,7 +52,19 @@ export class PrismaCartRepository implements CartRepository {
   async getOrCreateActive(userId: string): Promise<CartRecord> {
     const existing = await this.findActive(userId);
     if (existing) return existing;
-    return this.database.cart.create({ data: { userId, status: "ACTIVE" }, include: includeItems });
+
+    try {
+      return await this.database.cart.create({ data: { userId, status: "ACTIVE" }, include: includeItems });
+    } catch (error) {
+      // `Cart_one_active_per_user` is a partial PostgreSQL unique index. Two
+      // first requests can race after both observe no cart; the losing request
+      // should load the winning cart rather than exposing a database conflict.
+      if (isUniqueConstraintError(error)) {
+        const winner = await this.findActive(userId);
+        if (winner) return winner;
+      }
+      throw error;
+    }
   }
 
   async findItemForUser(userId: string, cartItemId: string): Promise<CartItemRecord | null> {
