@@ -19,6 +19,7 @@
     "docs:check": "node scripts/check-doc-links.mjs",
     "security:scan": "node scripts/check-secrets.mjs",
     "security:audit": "pnpm audit --audit-level high",
+    "perf:benchmark": "node scripts/performance/http-benchmark.mjs",
     "infra:up": "docker compose -f compose.dev.yml up -d",
     "infra:down": "docker compose -f compose.dev.yml down",
     "infra:logs": "docker compose -f compose.dev.yml logs -f",
