@@ -60,6 +60,7 @@ export const VendorPermissionSchema = Type.Union([
   Type.Literal("store:read"),
   Type.Literal("store:update"),
   Type.Literal("product:create"),
+  Type.Literal("product:read"),
   Type.Literal("product:update"),
   Type.Literal("product:archive"),
   Type.Literal("inventory:read"),
