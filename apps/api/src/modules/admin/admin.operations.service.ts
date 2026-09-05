@@ -105,12 +105,16 @@ export class AdminOperationsService {
         })),
       })),
       allocations: order.paymentIntents.flatMap((intent) =>
-        intent.allocations.map((allocation) => ({
-          paymentIntentId: intent.id,
-          vendorOrderId: allocation.vendorOrderId,
-          type: allocation.type,
-          amount: money(allocation.amountMinor, allocation.currency),
-        })),
+        intent.allocations.flatMap((allocation) =>
+          allocation.vendorOrderId
+            ? [{
+                paymentIntentId: intent.id,
+                vendorOrderId: allocation.vendorOrderId,
+                type: allocation.type,
+                amount: money(allocation.amountMinor, allocation.currency),
+              }]
+            : [],
+        ),
       ),
       refunds: [...refunds.values()]
         .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
