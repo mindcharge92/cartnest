@@ -83,6 +83,15 @@ function adapter(
     provider,
     initialize,
     verify: vi.fn(),
+    refund: vi.fn().mockResolvedValue({
+      kind: "submitted",
+      providerRefundReference: "refund-test",
+      status: "PROCESSING",
+    }),
+    verifyRefund: vi.fn().mockResolvedValue({
+      providerRefundReference: "refund-test",
+      status: "PROCESSING",
+    }),
     verifyWebhook: vi.fn(),
     normalizeWebhook: vi.fn(),
   } as PaymentProviderAdapter;
