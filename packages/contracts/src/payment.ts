@@ -127,3 +127,5 @@ export const ProviderWebhookAcceptedSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ProviderWebhookAcceptedDto = Static<typeof ProviderWebhookAcceptedSchema>;
+
+export * from "./logistics.js";
