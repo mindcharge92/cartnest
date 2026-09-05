@@ -14,7 +14,7 @@ import type {
   UpdateProductVariantBodyDto,
   VariantStatusDto,
 } from "@repo/contracts";
-import { type DatabaseClient, writeAuditEntry } from "@repo/database";
+import { Prisma, type DatabaseClient, writeAuditEntry } from "@repo/database";
 
 export type CategoryStatus = "ACTIVE" | "INACTIVE";
 
@@ -138,7 +138,6 @@ export interface CatalogRepository {
   listChildCategories(parentId: string): Promise<CategoryRecord[]>;
   createCategory(input: CreateCategoryBodyDto): Promise<CategoryRecord>;
   updateCategory(categoryId: string, input: UpdateCategoryBodyDto): Promise<CategoryRecord | null>;
-
   findProduct(productId: string): Promise<ProductRecord | null>;
   findStoreProductBySlug(storeId: string, slug: string): Promise<ProductRecord | null>;
   listStoreProducts(storeId: string): Promise<ProductRecord[]>;
@@ -152,7 +151,6 @@ export interface CatalogRepository {
   createVariant(productId: string, storeId: string, input: CreateProductVariantFromIdsBodyDto): Promise<VariantRecord>;
   findVariant(variantId: string): Promise<VariantRecord | null>;
   updateVariant(variantId: string, input: UpdateProductVariantBodyDto): Promise<VariantRecord | null>;
-
   createPendingMedia(input: {
     ownerType: MediaOwnerTypeDto;
     ownerId: string;
@@ -169,7 +167,6 @@ export interface CatalogRepository {
   completeMedia(mediaId: string, input: { width?: number; height?: number }): Promise<MediaRecord | null>;
   updateMedia(mediaId: string, input: UpdateMediaBodyDto): Promise<MediaRecord | null>;
   deleteMedia(mediaId: string, now: Date): Promise<MediaRecord | null>;
-
   listPublicCatalog(input: CatalogListInput): Promise<CatalogListResult>;
   findPublicProduct(productId: string): Promise<ProductRecord | null>;
   writeAudit(input: {
@@ -186,9 +183,7 @@ export interface CatalogRepository {
 const productInclude = {
   store: {
     include: {
-      vendor: {
-        select: { id: true, displayName: true, status: true },
-      },
+      vendor: { select: { id: true, displayName: true, status: true } },
     },
   },
   category: true,
@@ -216,6 +211,8 @@ const variantInclude = {
     },
   },
 } as const;
+
+const PUBLIC_MODERATION_STATUSES: ModerationStatusDto[] = ["NOT_REQUIRED", "APPROVED"];
 
 export class PrismaCatalogRepository implements CatalogRepository {
   constructor(private readonly database: DatabaseClient) {}
@@ -255,8 +252,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async updateCategory(categoryId: string, input: UpdateCategoryBodyDto): Promise<CategoryRecord | null> {
-    const existing = await this.findCategory(categoryId);
-    if (!existing) return null;
+    if (!(await this.findCategory(categoryId))) return null;
     return this.database.category.update({
       where: { id: categoryId },
       data: {
@@ -288,11 +284,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
     });
   }
 
-  async findSkuInStore(
-    storeId: string,
-    sku: string,
-    excludingVariantId?: string,
-  ): Promise<VariantRecord | null> {
+  async findSkuInStore(storeId: string, sku: string, excludingVariantId?: string): Promise<VariantRecord | null> {
     return this.database.productVariant.findFirst({
       where: {
         storeId,
@@ -359,8 +351,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async updateProduct(productId: string, input: UpdateProductBodyDto): Promise<ProductRecord | null> {
-    const existing = await this.findProduct(productId);
-    if (!existing) return null;
+    if (!(await this.findProduct(productId))) return null;
     await this.database.product.update({
       where: { id: productId },
       data: {
@@ -373,13 +364,8 @@ export class PrismaCatalogRepository implements CatalogRepository {
     return this.findProduct(productId);
   }
 
-  async setProductStatus(
-    productId: string,
-    status: ProductStatusDto,
-    archivedAt?: Date | null,
-  ): Promise<ProductRecord | null> {
-    const existing = await this.findProduct(productId);
-    if (!existing) return null;
+  async setProductStatus(productId: string, status: ProductStatusDto, archivedAt?: Date | null): Promise<ProductRecord | null> {
+    if (!(await this.findProduct(productId))) return null;
     await this.database.product.update({
       where: { id: productId },
       data: { status, ...(archivedAt !== undefined ? { archivedAt } : {}) },
@@ -387,12 +373,8 @@ export class PrismaCatalogRepository implements CatalogRepository {
     return this.findProduct(productId);
   }
 
-  async setModerationStatus(
-    productId: string,
-    status: ProductModerationBodyDto["status"],
-  ): Promise<ProductRecord | null> {
-    const existing = await this.findProduct(productId);
-    if (!existing) return null;
+  async setModerationStatus(productId: string, status: ProductModerationBodyDto["status"]): Promise<ProductRecord | null> {
+    if (!(await this.findProduct(productId))) return null;
     await this.database.product.update({
       where: { id: productId },
       data: {
@@ -422,11 +404,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
     });
   }
 
-  async createVariant(
-    productId: string,
-    storeId: string,
-    input: CreateProductVariantFromIdsBodyDto,
-  ): Promise<VariantRecord> {
+  async createVariant(productId: string, storeId: string, input: CreateProductVariantFromIdsBodyDto): Promise<VariantRecord> {
     const variantId = await this.database.$transaction(async (transaction) => {
       const variant = await transaction.productVariant.create({
         data: {
@@ -451,27 +429,17 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async findVariant(variantId: string): Promise<VariantRecord | null> {
-    return this.database.productVariant.findUnique({
-      where: { id: variantId },
-      include: variantInclude,
-    });
+    return this.database.productVariant.findUnique({ where: { id: variantId }, include: variantInclude });
   }
 
-  async updateVariant(
-    variantId: string,
-    input: UpdateProductVariantBodyDto,
-  ): Promise<VariantRecord | null> {
-    const existing = await this.findVariant(variantId);
-    if (!existing) return null;
+  async updateVariant(variantId: string, input: UpdateProductVariantBodyDto): Promise<VariantRecord | null> {
+    if (!(await this.findVariant(variantId))) return null;
     return this.database.productVariant.update({
       where: { id: variantId },
       data: {
         ...(input.sku !== undefined ? { sku: input.sku } : {}),
         ...(input.price !== undefined
-          ? {
-              priceAmountMinor: BigInt(input.price.amountMinor),
-              currency: input.price.currency,
-            }
+          ? { priceAmountMinor: BigInt(input.price.amountMinor), currency: input.price.currency }
           : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       },
@@ -516,12 +484,8 @@ export class PrismaCatalogRepository implements CatalogRepository {
     });
   }
 
-  async completeMedia(
-    mediaId: string,
-    input: { width?: number; height?: number },
-  ): Promise<MediaRecord | null> {
-    const existing = await this.findMedia(mediaId);
-    if (!existing) return null;
+  async completeMedia(mediaId: string, input: { width?: number; height?: number }): Promise<MediaRecord | null> {
+    if (!(await this.findMedia(mediaId))) return null;
     return this.database.media.update({
       where: { id: mediaId },
       data: {
@@ -534,8 +498,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async updateMedia(mediaId: string, input: UpdateMediaBodyDto): Promise<MediaRecord | null> {
-    const existing = await this.findMedia(mediaId);
-    if (!existing) return null;
+    if (!(await this.findMedia(mediaId))) return null;
     return this.database.media.update({
       where: { id: mediaId },
       data: {
@@ -547,8 +510,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async deleteMedia(mediaId: string, now: Date): Promise<MediaRecord | null> {
-    const existing = await this.findMedia(mediaId);
-    if (!existing) return null;
+    if (!(await this.findMedia(mediaId))) return null;
     return this.database.media.update({
       where: { id: mediaId },
       data: { status: "DELETED", deletedAt: now },
@@ -557,8 +519,8 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async listPublicCatalog(input: CatalogListInput): Promise<CatalogListResult> {
-    const variantFilter = {
-      status: "ACTIVE" as const,
+    const variantFilter: Prisma.ProductVariantWhereInput = {
+      status: "ACTIVE",
       ...(input.currency ? { currency: input.currency } : {}),
       ...(input.minPriceMinor !== undefined || input.maxPriceMinor !== undefined
         ? {
@@ -569,28 +531,30 @@ export class PrismaCatalogRepository implements CatalogRepository {
           }
         : {}),
     };
-    const where = {
-      status: "ACTIVE" as const,
-      moderationStatus: { in: ["NOT_REQUIRED", "APPROVED"] as const },
-      store: { status: "ACTIVE" as const, vendor: { status: "APPROVED" as const } },
+
+    const where: Prisma.ProductWhereInput = {
+      status: "ACTIVE",
+      moderationStatus: { in: PUBLIC_MODERATION_STATUSES },
+      store: { status: "ACTIVE", vendor: { status: "APPROVED" } },
       variants: { some: variantFilter },
       ...(input.storeId ? { storeId: input.storeId } : {}),
       ...(input.categoryIds ? { categoryId: { in: [...input.categoryIds] } } : {}),
       ...(input.q
         ? {
             OR: [
-              { name: { contains: input.q, mode: "insensitive" as const } },
-              { description: { contains: input.q, mode: "insensitive" as const } },
+              { name: { contains: input.q, mode: "insensitive" } },
+              { description: { contains: input.q, mode: "insensitive" } },
             ],
           }
         : {}),
     };
-    const orderBy =
+
+    const orderBy: Prisma.ProductOrderByWithRelationInput =
       input.sort === "NAME_ASC"
-        ? ({ name: "asc" } as const)
+        ? { name: "asc" }
         : input.sort === "NAME_DESC"
-          ? ({ name: "desc" } as const)
-          : ({ createdAt: "desc" } as const);
+          ? { name: "desc" }
+          : { createdAt: "desc" };
 
     const [totalItems, items] = await Promise.all([
       this.database.product.count({ where }),
@@ -610,7 +574,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
       where: {
         id: productId,
         status: "ACTIVE",
-        moderationStatus: { in: ["NOT_REQUIRED", "APPROVED"] },
+        moderationStatus: { in: PUBLIC_MODERATION_STATUSES },
         store: { status: "ACTIVE", vendor: { status: "APPROVED" } },
         variants: { some: { status: "ACTIVE" } },
       },
