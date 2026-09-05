@@ -76,6 +76,8 @@ export interface PaymentRepository {
     paymentIntentId: string;
     provider: PaymentProviderDto;
     providerReference: string;
+    expectedAmountMinor: bigint;
+    expectedCurrency: string;
     channel?: PaymentChannelDto;
   }): Promise<PaymentIntentRecord["attempts"][number]>;
   completeInitialization(input: {
@@ -133,6 +135,20 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+function databaseSignal(error: unknown, signal: string): boolean {
+  return error instanceof Error && error.message.includes(signal);
+}
+
+async function lockOrderRow(transaction: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+  const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "Order"
+    WHERE "id" = ${orderId}::uuid
+    FOR UPDATE
+  `);
+  return rows.length === 1;
+}
+
 function proportionalFee(totalFee: bigint, totals: readonly bigint[]): bigint[] {
   if (totals.length === 0) return [];
   const denominator = totals.reduce((sum, value) => sum + value, 0n);
@@ -144,6 +160,22 @@ function proportionalFee(totalFee: bigint, totals: readonly bigint[]): bigint[] 
     allocated += share;
     return share;
   });
+}
+
+function payableVariantQuantities(
+  vendorOrders: readonly {
+    status: string;
+    items: readonly { variantId: string; quantity: number }[];
+  }[],
+): Map<string, number> {
+  const expected = new Map<string, number>();
+  for (const vendorOrder of vendorOrders) {
+    if (vendorOrder.status === "CANCELLED") continue;
+    for (const item of vendorOrder.items) {
+      expected.set(item.variantId, (expected.get(item.variantId) ?? 0) + item.quantity);
+    }
+  }
+  return expected;
 }
 
 function payableVariantIds(
@@ -159,6 +191,24 @@ function payableVariantIds(
   );
 }
 
+function reservationsArePayable(intent: PaymentIntentRecord, now: Date): boolean {
+  const expected = payableVariantQuantities(intent.order.vendorOrders);
+  if (expected.size === 0) return false;
+  const heldByVariant = new Map(
+    intent.order.reservations
+      .filter((reservation) => reservation.status === "HELD")
+      .map((reservation) => [reservation.variantId, reservation] as const),
+  );
+  return [...expected.entries()].every(([variantId, quantity]) => {
+    const reservation = heldByVariant.get(variantId);
+    return Boolean(
+      reservation &&
+      reservation.quantity === quantity &&
+      reservation.expiresAt > now,
+    );
+  });
+}
+
 export class PrismaPaymentRepository implements PaymentRepository {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -172,9 +222,9 @@ export class PrismaPaymentRepository implements PaymentRepository {
     channel?: PaymentChannelDto;
     now: Date;
   }): Promise<BeginInitializationResult> {
+    const operation = `payment.initialize:${input.paymentIntentId}`;
     try {
       return await this.database.$transaction(async (transaction) => {
-        const operation = `payment.initialize:${input.paymentIntentId}`;
         const existingKey = await transaction.idempotencyRecord.findUnique({
           where: {
             principalId_operation_idempotencyKey: {
@@ -184,16 +234,21 @@ export class PrismaPaymentRepository implements PaymentRepository {
             },
           },
         });
-        if (existingKey) {
-          if (existingKey.requestFingerprint !== input.requestFingerprint) {
-            return { kind: "idempotency_conflict" as const };
-          }
-          if (existingKey.status === "COMPLETED" && existingKey.responseBody !== null) {
-            return { kind: "replay" as const, responseBody: existingKey.responseBody };
-          }
-          return { kind: "in_progress" as const };
+        if (existingKey && existingKey.requestFingerprint !== input.requestFingerprint) {
+          return { kind: "idempotency_conflict" as const };
         }
 
+        const identity = await transaction.paymentIntent.findFirst({
+          where: { id: input.paymentIntentId, order: { userId: input.userId } },
+          select: { orderId: true },
+        });
+        if (!identity) return { kind: "intent_not_found" as const };
+        if (!(await lockOrderRow(transaction, identity.orderId))) {
+          return { kind: "intent_not_found" as const };
+        }
+
+        // Reload after acquiring the parent Order lock. Cancellation, partial
+        // cancellation and payment initialization now share one serialization point.
         const intent = await transaction.paymentIntent.findFirst({
           where: { id: input.paymentIntentId, order: { userId: input.userId } },
           include: paymentIntentInclude,
@@ -208,6 +263,22 @@ export class PrismaPaymentRepository implements PaymentRepository {
         ) {
           return { kind: "not_payable" as const };
         }
+        if (!["PENDING", "FAILED", "REQUIRES_ACTION", "PROCESSING"].includes(intent.status)) {
+          return { kind: "not_payable" as const };
+        }
+        if (!reservationsArePayable(intent, input.now)) {
+          return { kind: "reservation_expired" as const };
+        }
+
+        // A completed initialization is replayed only while the order is still
+        // payable and the reservation is live. This prevents a stale hosted URL
+        // from being replayed after cancellation or reservation expiry.
+        if (existingKey) {
+          if (existingKey.status === "COMPLETED" && existingKey.responseBody !== null) {
+            return { kind: "replay" as const, responseBody: existingKey.responseBody };
+          }
+          return { kind: "in_progress" as const };
+        }
 
         const active = intent.attempts.find((attempt) =>
           ["PENDING", "REQUIRES_ACTION", "PROCESSING", "SUCCEEDED"].includes(attempt.status),
@@ -215,20 +286,6 @@ export class PrismaPaymentRepository implements PaymentRepository {
         if (active) return { kind: "active_attempt" as const, attemptId: active.id };
         if (!["PENDING", "FAILED"].includes(intent.status)) {
           return { kind: "not_payable" as const };
-        }
-
-        const expectedVariants = payableVariantIds(intent.order.vendorOrders);
-        const relevantReservations = intent.order.reservations.filter((reservation) =>
-          expectedVariants.has(reservation.variantId),
-        );
-        if (
-          expectedVariants.size === 0 ||
-          relevantReservations.length !== expectedVariants.size ||
-          relevantReservations.some(
-            (reservation) => reservation.status !== "HELD" || reservation.expiresAt <= input.now,
-          )
-        ) {
-          return { kind: "reservation_expired" as const };
         }
 
         const idempotency = await transaction.idempotencyRecord.create({
@@ -254,7 +311,32 @@ export class PrismaPaymentRepository implements PaymentRepository {
         return { kind: "created" as const, intent, attempt, idempotencyId: idempotency.id };
       });
     } catch (error) {
+      if (databaseSignal(error, "PAYMENT_RESERVATION_EXPIRED")) {
+        return { kind: "reservation_expired" };
+      }
+      if (
+        databaseSignal(error, "ORDER_PAYMENT_STATE_CHANGED") ||
+        databaseSignal(error, "ORDER_PAYMENT_AMOUNT_CHANGED")
+      ) {
+        return { kind: "not_payable" };
+      }
+      if (databaseSignal(error, "ORDER_PAYMENT_ACTIVE")) {
+        return { kind: "active_attempt", attemptId: "concurrent" };
+      }
       if (!isUniqueViolation(error)) throw error;
+
+      // Only an idempotency-key race is safe to replay. A provider-reference
+      // collision must escape rather than recursively retrying the same reference.
+      const duplicateKey = await this.database.idempotencyRecord.findUnique({
+        where: {
+          principalId_operation_idempotencyKey: {
+            principalId: input.userId,
+            operation,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (!duplicateKey) throw error;
       return this.beginInitialization(input);
     }
   }
@@ -263,19 +345,55 @@ export class PrismaPaymentRepository implements PaymentRepository {
     paymentIntentId: string;
     provider: PaymentProviderDto;
     providerReference: string;
+    expectedAmountMinor: bigint;
+    expectedCurrency: string;
     channel?: PaymentChannelDto;
   }): Promise<PaymentIntentRecord["attempts"][number]> {
-    const intent = await this.database.paymentIntent.findUniqueOrThrow({ where: { id: input.paymentIntentId } });
-    return this.database.paymentAttempt.create({
-      data: {
-        paymentIntentId: input.paymentIntentId,
-        provider: input.provider,
-        providerReference: input.providerReference,
-        amountMinor: intent.amountMinor,
-        currency: intent.currency,
-        status: "PENDING",
-        channel: input.channel,
-      },
+    return this.database.$transaction(async (transaction) => {
+      const identity = await transaction.paymentIntent.findUnique({
+        where: { id: input.paymentIntentId },
+        select: { orderId: true },
+      });
+      if (!identity || !(await lockOrderRow(transaction, identity.orderId))) {
+        throw new Error("PAYMENT_NOT_PAYABLE");
+      }
+      const intent = await transaction.paymentIntent.findUnique({
+        where: { id: input.paymentIntentId },
+        include: paymentIntentInclude,
+      });
+      if (
+        !intent ||
+        !["PENDING_PAYMENT", "PARTIALLY_CANCELLED"].includes(intent.order.status) ||
+        intent.order.paymentStatus !== "PENDING" ||
+        !["PENDING", "FAILED"].includes(intent.status)
+      ) {
+        throw new Error("PAYMENT_NOT_PAYABLE");
+      }
+      if (
+        intent.amountMinor !== input.expectedAmountMinor ||
+        intent.currency !== input.expectedCurrency
+      ) {
+        throw new Error("PAYMENT_AMOUNT_CHANGED");
+      }
+      if (!reservationsArePayable(intent, new Date())) {
+        throw new Error("PAYMENT_RESERVATION_EXPIRED");
+      }
+      const active = intent.attempts.find((attempt) =>
+        ["PENDING", "REQUIRES_ACTION", "PROCESSING", "SUCCEEDED"].includes(attempt.status),
+      );
+      if (active) throw new Error("ORDER_PAYMENT_ACTIVE");
+
+      return transaction.paymentAttempt.create({
+        data: {
+          paymentIntentId: input.paymentIntentId,
+          provider: input.provider,
+          providerReference: input.providerReference,
+          amountMinor: input.expectedAmountMinor,
+          currency: input.expectedCurrency,
+          status: "PENDING",
+          channel: input.channel,
+        },
+      });
     });
   }
 
@@ -693,7 +811,10 @@ export class PrismaPaymentRepository implements PaymentRepository {
   }): Promise<Array<{ id: string; provider: PaymentProviderDto; providerReference: string }>> {
     const attempts = await this.database.paymentAttempt.findMany({
       where: {
-        status: { in: ["PROCESSING", "REQUIRES_ACTION"] },
+        // PENDING is included so a process crash after persisting an attempt but
+        // before finishing the provider initialization call cannot strand an
+        // order forever. Provider verification remains authoritative.
+        status: { in: ["PENDING", "PROCESSING", "REQUIRES_ACTION"] },
         updatedAt: { lte: input.olderThan },
         providerReference: { not: null },
       },
