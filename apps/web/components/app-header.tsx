@@ -23,6 +23,12 @@ export function AppHeader() {
           </Link>
           {status === "authenticated" ? (
             <>
+              <Link className="navLink commerceNavLink" aria-current={pathname.startsWith("/wishlist") ? "page" : undefined} href="/wishlist">
+                Saved
+              </Link>
+              <Link className="navLink commerceNavLink" aria-current={pathname.startsWith("/cart") ? "page" : undefined} href="/cart">
+                Cart
+              </Link>
               <Link className="navLink" aria-current={pathname.startsWith("/vendor") ? "page" : undefined} href="/vendor">
                 Seller
               </Link>
