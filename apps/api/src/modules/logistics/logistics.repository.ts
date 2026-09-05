@@ -2,7 +2,14 @@ import type { FulfillmentProfileBodyDto, ShipmentProviderDto, ShipmentStatusDto,
 import { Prisma, type DatabaseClient, enqueueOutboxEvent, writeAuditEntry } from "@repo/database";
 
 const shipmentInclude = { events: { orderBy: { eventTime: "asc" as const } } } satisfies Prisma.ShipmentInclude;
-export type ShipmentRecord = Prisma.ShipmentGetPayload<{ include: typeof shipmentInclude }>;
+type BaseShipmentRecord = Prisma.ShipmentGetPayload<{ include: typeof shipmentInclude }>;
+export type ShipmentRecord = BaseShipmentRecord & {
+  items: Array<{ orderItemId: string; quantity: number }>;
+};
+
+function uniqueRequestedItems(items: readonly { orderItemId: string; quantity: number }[]): boolean {
+  return new Set(items.map((item) => item.orderItemId)).size === items.length;
+}
 
 export class PrismaLogisticsRepository {
   constructor(private readonly database: DatabaseClient) {}
@@ -49,6 +56,10 @@ export class PrismaLogisticsRepository {
       create: { variantId, ...data },
       update: data,
     });
+  }
+
+  findVariantShippingProfile(variantId: string) {
+    return this.database.variantShippingProfile.findUnique({ where: { variantId } });
   }
 
   listVariantProfiles(variantIds: readonly string[]) {
@@ -115,6 +126,32 @@ export class PrismaLogisticsRepository {
     });
   }
 
+  private async hydrateShipment(record: BaseShipmentRecord): Promise<ShipmentRecord> {
+    const items = await this.database.shipmentItem.findMany({
+      where: { shipmentId: record.id },
+      orderBy: { createdAt: "asc" },
+      select: { orderItemId: true, quantity: true },
+    });
+    return { ...record, items };
+  }
+
+  private async hydrateShipments(records: BaseShipmentRecord[]): Promise<ShipmentRecord[]> {
+    if (records.length === 0) return [];
+    const ids = records.map((record) => record.id);
+    const items = await this.database.shipmentItem.findMany({
+      where: { shipmentId: { in: ids } },
+      orderBy: { createdAt: "asc" },
+      select: { shipmentId: true, orderItemId: true, quantity: true },
+    });
+    const byShipment = new Map<string, Array<{ orderItemId: string; quantity: number }>>();
+    for (const item of items) {
+      const list = byShipment.get(item.shipmentId) ?? [];
+      list.push({ orderItemId: item.orderItemId, quantity: item.quantity });
+      byShipment.set(item.shipmentId, list);
+    }
+    return records.map((record) => ({ ...record, items: byShipment.get(record.id) ?? [] }));
+  }
+
   async createShipment(input: {
     vendorOrderId: string;
     provider: ShipmentProviderDto;
@@ -127,7 +164,43 @@ export class PrismaLogisticsRepository {
     actorUserId: string;
     now: Date;
   }): Promise<ShipmentRecord> {
+    if (!uniqueRequestedItems(input.items)) throw new Error("SHIPMENT_ITEM_DUPLICATE");
+
     const id = await this.database.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "VendorOrder"
+        WHERE "id" = ${input.vendorOrderId}::uuid
+        FOR UPDATE
+      `);
+      if (locked.length !== 1) throw new Error("VENDOR_ORDER_NOT_FOUND");
+
+      const requestedIds = input.items.map((item) => item.orderItemId);
+      const ordered = await tx.orderItem.findMany({
+        where: { vendorOrderId: input.vendorOrderId, id: { in: requestedIds } },
+        select: { id: true, quantity: true },
+      });
+      if (ordered.length !== requestedIds.length) throw new Error("ORDER_ITEM_NOT_FOUND");
+
+      const allocatedRows = await tx.$queryRaw<Array<{ orderItemId: string; quantity: number }>>(Prisma.sql`
+        SELECT si."orderItemId", COALESCE(SUM(si."quantity"), 0)::int AS quantity
+        FROM "ShipmentItem" si
+        INNER JOIN "Shipment" s ON s."id" = si."shipmentId"
+        WHERE s."vendorOrderId" = ${input.vendorOrderId}::uuid
+          AND s."status" <> 'CANCELLED'
+          AND si."orderItemId" IN (${Prisma.join(requestedIds.map((id) => Prisma.sql`${id}::uuid`))})
+        GROUP BY si."orderItemId"
+      `);
+      const orderedById = new Map(ordered.map((item) => [item.id, item.quantity]));
+      const allocatedById = new Map(allocatedRows.map((item) => [item.orderItemId, item.quantity]));
+      for (const requested of input.items) {
+        const orderedQuantity = orderedById.get(requested.orderItemId);
+        if (orderedQuantity === undefined) throw new Error("ORDER_ITEM_NOT_FOUND");
+        if ((allocatedById.get(requested.orderItemId) ?? 0) + requested.quantity > orderedQuantity) {
+          throw new Error(`SHIPMENT_QUANTITY_EXCEEDED:${requested.orderItemId}`);
+        }
+      }
+
       const shipment = await tx.shipment.create({
         data: {
           vendorOrderId: input.vendorOrderId,
@@ -162,15 +235,19 @@ export class PrismaLogisticsRepository {
       });
       return shipment.id;
     });
-    return this.database.shipment.findUniqueOrThrow({ where: { id }, include: shipmentInclude });
+    const shipment = await this.findShipment(id);
+    if (!shipment) throw new Error("Created shipment could not be reloaded.");
+    return shipment;
   }
 
-  findShipment(shipmentId: string): Promise<ShipmentRecord | null> {
-    return this.database.shipment.findUnique({ where: { id: shipmentId }, include: shipmentInclude });
+  async findShipment(shipmentId: string): Promise<ShipmentRecord | null> {
+    const record = await this.database.shipment.findUnique({ where: { id: shipmentId }, include: shipmentInclude });
+    return record ? this.hydrateShipment(record) : null;
   }
 
-  listVendorOrderShipments(vendorOrderId: string): Promise<ShipmentRecord[]> {
-    return this.database.shipment.findMany({ where: { vendorOrderId }, orderBy: { createdAt: "asc" }, include: shipmentInclude });
+  async listVendorOrderShipments(vendorOrderId: string): Promise<ShipmentRecord[]> {
+    const records = await this.database.shipment.findMany({ where: { vendorOrderId }, orderBy: { createdAt: "asc" }, include: shipmentInclude });
+    return this.hydrateShipments(records);
   }
 
   async appendShipmentEvent(input: {
@@ -210,15 +287,18 @@ export class PrismaLogisticsRepository {
         payload: { shipmentId: input.shipmentId, status: input.status, eventTime: input.eventTime.toISOString() },
       });
     });
-    return this.database.shipment.findUniqueOrThrow({ where: { id: input.shipmentId }, include: shipmentInclude });
+    const shipment = await this.findShipment(input.shipmentId);
+    if (!shipment) throw new Error("Shipment could not be reloaded.");
+    return shipment;
   }
 
-  listTrackingCandidates(limit = 100) {
-    return this.database.shipment.findMany({
+  async listTrackingCandidates(limit = 100): Promise<ShipmentRecord[]> {
+    const records = await this.database.shipment.findMany({
       where: { provider: "GIGL", status: { in: ["BOOKED", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "FAILED", "RETURNING"] } },
       orderBy: { updatedAt: "asc" },
       take: limit,
       include: shipmentInclude,
     });
+    return this.hydrateShipments(records);
   }
 }
