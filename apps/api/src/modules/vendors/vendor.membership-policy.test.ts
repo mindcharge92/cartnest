@@ -86,4 +86,34 @@ describe("vendor invitation membership policy", () => {
       permissions: ["store:read", "product:create"],
     });
   });
+
+  it("lets staff delegate an effective read prerequisite they already hold through a stronger capability", async () => {
+    const staffUserId = "77777777-7777-4777-8777-777777777777";
+    const staffPrincipal: AccessPrincipal = {
+      ...principal,
+      userId: staffUserId,
+    };
+    const staffActor: VendorMembershipRecord = {
+      ...owner,
+      id: "88888888-8888-4888-8888-888888888888",
+      userId: staffUserId,
+      role: "STAFF",
+      permissions: ["staff:update"],
+    };
+    const updated = { ...invitation, permissions: ["staff:read"] } as VendorMemberRecord;
+    const repo = repository({
+      findMembership: vi.fn().mockResolvedValue(staffActor),
+      updateMember: vi.fn().mockResolvedValue(updated),
+    });
+    const service = new VendorService(repo);
+
+    const result = await service.updateMember(staffPrincipal, vendorId, memberId, {
+      permissions: ["staff:read"],
+    });
+
+    expect(result.permissions).toContain("staff:read");
+    expect(repo.updateMember).toHaveBeenCalledWith(vendorId, memberId, {
+      permissions: ["staff:read"],
+    });
+  });
 });
