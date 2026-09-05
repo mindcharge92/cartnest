@@ -1,16 +1,18 @@
-# ADR-005: Money, Currency, Pricing, Fees, and Rounding
+# ADR-005: Money, Currency, Pricing, Fees, Commission, Tax, and Rounding
 
-**Status:** Proposed baseline — validate before financial implementation  
-**Date:** 4 September 2026  
+**Status:** Accepted  
+**Accepted:** 5 September 2026  
 **Primary Currency:** NGN  
 **Providers:** Paystack + Flutterwave  
 **Risk:** High
 
-## Proposed Decision
+## Decision
 
-Represent monetary amounts internally as integer minor units with an explicit ISO currency code. For NGN, `1 naira = 100 kobo`. Use a database integer/bigint representation appropriate to expected limits and never floating-point for persisted/accounting amounts.
+CartNest represents financial truth using integer minor units plus an explicit ISO currency code. For NGN, `1 naira = 100 kobo`; therefore `NGN 50,000.00 = 5,000,000 kobo`.
 
-At the JSON boundary, use a safe canonical representation. When persisted as bigint, the recommended transport is a decimal string for minor units:
+Persisted/accounting money must never use binary floating point.
+
+When bigint is used internally/database-side, the API transports minor-unit amounts as decimal strings:
 
 ```json
 {
@@ -19,218 +21,192 @@ At the JSON boundary, use a safe canonical representation. When persisted as big
 }
 ```
 
-`5,000,000` kobo represents `₦50,000.00`.
+## 1. Money Value
 
-## 1. Why This Matters
-
-- Binary floating point can create rounding errors in totals, discounts, tax, commissions, and refunds.
-- Payment providers commonly operate on minor units.
-- Multi-vendor checkout requires deterministic allocation across vendor orders, fees, delivery, and refunds.
-- A single money representation prevents frontend, backend, database, and gateway disagreement.
-- Historical orders must not change when a vendor edits a current product price.
-
-## 2. Money Value Model
-
-Conceptual backend value object:
+Conceptually:
 
 ```ts
-type Currency = "NGN";
-
 type Money = {
   amountMinor: bigint;
-  currency: Currency;
+  currency: "NGN";
 };
 ```
 
-Transport contract:
+All arithmetic occurs through centralized helpers/value objects so currency mismatch, unsafe conversion, and inconsistent rounding are difficult to introduce.
 
-```ts
-const MoneySchema = Type.Object({
-  amountMinor: Type.String({ pattern: "^[0-9]+$" }),
-  currency: Type.Literal("NGN"),
-});
-```
+## 2. Financial Components
 
-The implementation may wrap this in a dedicated `Money` value object so arithmetic and comparison cannot silently mix currencies.
+CartNest tracks financial components separately rather than storing only a final grand total:
 
-## 3. Core Rules
+- item unit price and quantity;
+- item/order discount allocations;
+- VAT/tax allocation;
+- delivery fee;
+- platform commission;
+- gateway transaction fee;
+- vendor gross/net allocation;
+- platform allocation;
+- captured amount;
+- refunded amount;
+- settlement-eligible/settled amount.
 
-1. **No float persistence:** persisted/accounting amounts are not floating-point values.
-2. **Currency is explicit:** never pass a naked number where currency could be ambiguous.
-3. **Server totals are authoritative:** frontend may estimate/display, but checkout totals are recalculated by the backend.
-4. **Provider adapters own conversion:** Paystack/Flutterwave formats are mapped inside payment adapters.
-5. **Immutable snapshots:** order lines retain historical unit price, discount, tax/fee components, and relevant product identifiers.
-6. **Deterministic rounding:** round at defined boundaries using one approved rule.
-7. **Deterministic allocation:** the same input must produce the same vendor/platform allocation.
-8. **Financial history is append/audit oriented:** current pricing rules must not rewrite historical transactions.
+Historical order economics are immutable snapshots.
 
-## 4. Pricing Components
+## 3. Commission Model
 
-| Component | Source | Required Behavior |
-| --- | --- | --- |
-| unit price | vendor/catalog | snapshotted at order time |
-| quantity | cart/order | integer |
-| item discount | pricing/promotion | explicit amount/rule snapshot |
-| order discount | platform/promotion | deterministic allocation policy |
-| delivery fee | logistics/platform | may differ per vendor shipment |
-| tax/VAT | tax policy | separately represented when introduced |
-| platform commission | marketplace | snapshotted/calculated per vendor order or item |
-| payment fee | provider/platform policy | do not assume automatically passed to buyer |
-| refund | payment/order workflow | reverses original economic allocation |
+MVP revenue uses percentage commission on marketplace sales.
 
-## 5. Example Calculation
+Commission configuration supports:
+
+1. platform default rate;
+2. category override;
+3. vendor override;
+4. vendor + category override where business rules require it.
+
+The implementation must define deterministic precedence. Recommended precedence:
 
 ```text
-Item subtotal:      8,500,000 kobo
-Discount:             -500,000
-Delivery:              300,000
-Tax (if applicable):   600,000
---------------------------------
-Customer total:      8,900,000 kobo
+vendor+category override
+  -> vendor override
+  -> category override
+  -> platform default
 ```
 
-Store the individual components required for reconciliation rather than only the final number.
+The rate and resulting commission amount actually used are snapshotted on the financial allocation/VendorOrder. Changing configuration later must not rewrite historical orders.
 
-## 6. Price Snapshot Requirements
+## 4. Gateway Fee Policy
 
-An `OrderItem` should retain, as appropriate:
+MVP policy: **the vendor bears payment gateway transaction fees**.
 
-- product ID;
-- variant ID;
-- product/variant name snapshot;
-- SKU snapshot;
-- unit price;
-- quantity;
-- line subtotal;
-- discount allocation;
-- tax allocation where applicable;
-- final line total;
-- currency.
+Gateway fee must remain its own financial component. It must not be hidden by mutating product price or commission.
 
-Later edits to product price/name must not modify historical order economics.
+The policy is configurable for future business changes, but any order records the policy/amount that actually applied.
 
-## 7. Multi-Vendor Allocation
+## 5. Tax / VAT
 
-One parent order can contain multiple vendor orders.
-
-The financial system therefore needs to preserve:
-
-```text
-customer payment
-  -> vendor order A allocation
-  -> vendor order B allocation
-  -> platform allocation/fees
-```
+MVP supports a configurable platform-level VAT/tax percentage rather than a complex multi-jurisdiction tax engine.
 
 Rules:
 
-- parent total must reconcile with vendor/platform components;
-- allocate discounts/fees through a documented deterministic algorithm;
-- retain allocation records so a partial refund can reverse the original distribution;
-- do not recalculate historical commissions using today's vendor settings.
+- tax policy is backend authoritative;
+- tax amount is explicit and snapshotted;
+- rate changes do not change historical orders;
+- tax is not silently folded into commission;
+- future category/vendor/jurisdiction tax rules require an explicit extension/decision.
 
-## 8. Rounding Policy
+## 6. Promotions
 
-The final rounding mode must be implemented centrally.
+MVP starts with platform-controlled coupons/promotions.
 
-| Situation | Policy |
-| --- | --- |
-| percentage discount | calculate at adequate precision and round once to minor unit |
-| commission | calculate then round at documented boundary |
-| allocation remainder | assign deterministically; never lose/create value silently |
-| refund | cannot exceed remaining refundable minor units |
-| display formatting | presentation only; never changes stored amount |
+The data model should permit future vendor promotions without reworking order history.
 
-## 9. Database Representation
+Promotion application must record enough information to explain the discount later, including code/rule identity and allocated discount amount.
 
-Recommended logical columns:
+## 7. Server Authority
+
+The frontend may display estimates, but the backend recalculates checkout using current authoritative:
+
+- catalog price;
+- inventory availability;
+- promotion eligibility;
+- tax policy;
+- delivery fee;
+- commission configuration;
+- gateway-fee policy where applicable.
+
+A client-supplied total is never trusted as financial truth.
+
+## 8. Rounding
+
+All percentage calculations use one centralized rounding rule and round at an explicitly documented minor-unit boundary.
+
+Allocation remainders are assigned deterministically so no kobo is silently created or lost.
+
+Tests must include edge cases where percentages create fractional minor units.
+
+## 9. Multi-Vendor Reconciliation
+
+For one parent payment:
+
+```text
+Captured customer amount
+  -> VendorOrder A allocation
+       -> vendor gross
+       -> commission
+       -> gateway fee share
+       -> tax/fees as applicable
+       -> vendor net
+  -> VendorOrder B allocation
+  -> platform allocation
+```
+
+The exact components must reconcile to the customer capture.
+
+## 10. Settlement Baseline
+
+Preferred settlement uses gateway subaccount/split-payment facilities where provider/business requirements allow it.
+
+Settlement becomes eligible after confirmed delivery. Operational settlement then follows a configurable schedule; baseline planning target is **T+2 after delivery eligibility**, subject to provider settlement mechanics and risk/returns policy.
+
+CartNest must preserve its own allocation/settlement records even when the gateway performs the actual split.
+
+## 11. Refunds
+
+Partial and full refunds are supported.
+
+A refund:
+
+- references the original payment/allocation;
+- cannot exceed remaining refundable amount;
+- may target items or a VendorOrder;
+- reverses the original economics deterministically;
+- records provider confirmation separately from refund request creation;
+- affects vendor settlement eligibility/balance according to policy.
+
+Vendor refund authority is limited by explicit permission and business limits. Admin can review/override through audited operations.
+
+## 12. Database Representation
+
+Recommended logical pattern:
 
 ```text
 amount_minor BIGINT
 currency CHAR(3)
 ```
 
-Prisma bigint values must be mapped deliberately before JSON serialization.
+Use separate fields/records for commission, gateway fee, tax, discount, delivery, refund, and settlement values where accounting/reconciliation requires them.
 
-Do not expose raw Prisma bigint values directly through API DTOs.
+Prisma `BigInt` values must be mapped to contract DTOs; never serialize raw Prisma models directly.
 
-## 10. Frontend Representation
+## 13. Invariants
 
-The frontend consumes the canonical transport representation and formats for display.
-
-Example utility behavior:
+Required invariants include:
 
 ```text
-{ amountMinor: "5000000", currency: "NGN" }
-                |
-                v
-            ₦50,000.00
+sum(item/fee/tax/discount components) == order total
+sum(vendor + platform allocations) == captured amount
+total refunds <= captured amount
+vendor settlement <= remaining vendor net allocation
+applied commission snapshot does not change after order creation
+currency remains consistent inside a financial transaction
 ```
 
-Formatted strings are not sent back as the source value for financial mutations.
+## 14. Testing
 
-## 11. Provider Mapping
+Test at minimum:
 
-Payment adapters must verify what unit each provider endpoint expects and convert from the platform `Money` representation.
-
-Provider request/response fields must not become the platform's public money model.
-
-Before marking payment successful, verify at least:
-
-- expected amount;
-- expected currency;
-- expected internal payment/order reference;
-- provider transaction reference/state.
-
-## 12. Refund Rules
-
-- total successful refund must not exceed captured amount;
-- partial refunds reduce remaining refundable balance;
-- refund allocation should identify vendor order/item components where applicable;
-- refund request and refund completion are different states;
-- failed refund must not silently alter order totals.
-
-## 13. Vendor Settlement
-
-Vendor settlement is not fully designed yet, but financial records must support future settlement by preserving vendor allocations and historical commission/fee information.
-
-Settlement must never be calculated solely from current catalog price or current commission configuration.
-
-## 14. Financial Invariants
-
-The following must be enforceable/testable:
-
-```text
-sum(item totals + fees - discounts + taxes) == order total
-sum(vendor allocations + platform allocations) == captured customer amount
-total refunded <= total captured
-vendor settled <= vendor net allocation after valid deductions/refunds
-currency is consistent within one financial transaction unless explicit FX is introduced
-```
-
-## 15. Testing Requirements
-
-- exact addition/subtraction in minor units;
-- percentage rounding edge cases;
-- allocation remainder handling;
-- very large supported amounts;
-- zero values where valid;
-- negative amounts rejected except internal signed adjustment models where explicitly designed;
+- exact minor-unit addition/subtraction;
+- commission override precedence;
+- commission rounding;
+- VAT rounding;
+- coupon allocation;
+- gateway fee allocation;
+- multi-vendor remainder allocation;
 - partial refunds;
-- provider amount mismatch;
-- frontend formatting does not alter canonical value.
+- settlement eligibility after delivery;
+- provider amount/currency mismatch;
+- historical snapshots after configuration changes.
 
-## 16. Decisions Deferred
+## Final Decision
 
-- VAT/tax calculation policy;
-- platform commission model/tiers;
-- who bears gateway fees;
-- vendor payout schedule/reserve policy;
-- foreign currency support;
-- promotion/coupon allocation rules.
-
-These require explicit decisions before the affected production flows are finalized.
-
-## 17. Final Baseline
-
-CartNest uses explicit currency + integer minor units for financial truth. The backend owns calculations, providers are adapters, order pricing is snapshotted, and all allocations/refunds must reconcile exactly.
+CartNest uses NGN integer minor units, configurable and snapshotted commission per vendor/category, vendor-borne gateway fees for MVP, configurable platform VAT, platform promotions first, deterministic financial allocation/refunds, and delivery-gated scheduled vendor settlement.

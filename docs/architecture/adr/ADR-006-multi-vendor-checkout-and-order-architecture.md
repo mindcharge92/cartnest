@@ -1,328 +1,223 @@
-# ADR-006: Multi-Vendor Checkout and Order Architecture
+# ADR-006: Multi-Vendor Checkout, Order, Fulfillment, Returns, and Review Eligibility
 
-**Status:** Proposed baseline  
-**Date:** 4 September 2026  
+**Status:** Accepted  
+**Accepted:** 5 September 2026  
 **Marketplace:** Multi-vendor  
-**Payment model:** one customer checkout coordinated at parent-order level  
-**Related:** ADR-005
+**Related:** ADR-005, ADR-007, ADR-010
 
-## Proposed Decision
+## Decision
 
-A buyer experiences one checkout, but the backend decomposes the purchase into one parent `Order` plus one `VendorOrder` per participating store/vendor. Order items belong to a `VendorOrder`, fulfillment and shipment are vendor-scoped, while payment can be initiated for the parent order.
+A customer may place products from multiple stores/vendors into one cart and complete one checkout. The backend creates one parent `Order` plus one `VendorOrder` per participating store/vendor.
 
-This preserves a coherent customer experience without forcing unrelated vendors to share fulfillment state.
+Each VendorOrder owns its fulfillment lifecycle and may contain multiple shipments. Payment is coordinated at parent-order level and allocated to VendorOrders/platform components.
 
 ## 1. Aggregate Structure
 
 ```text
-Customer Checkout
-      |
-      v
-Parent Order
-  +-- VendorOrder A
-  |     +-- OrderItem A1
-  |     +-- OrderItem A2
-  |     +-- Shipment A
-  |
-  +-- VendorOrder B
-        +-- OrderItem B1
-        +-- Shipment B
-
-Parent Payment / PaymentIntent
-  -> allocation to VendorOrder A
-  -> allocation to VendorOrder B
-  -> platform fees
+Cart
+  -> Checkout
+      -> Parent Order
+          -> VendorOrder A
+              -> OrderItems
+              -> Shipment A1
+              -> Shipment A2
+          -> VendorOrder B
+              -> OrderItems
+              -> Shipment B1
+      -> PaymentIntent
+          -> PaymentAllocations
 ```
 
-## 2. Why Split by Vendor
+## 2. Store/Vendor Assumptions
 
-- different vendors accept and fulfill at different times;
-- each vendor owns separate inventory;
-- each vendor may have different logistics/shipment state;
-- partial cancellation/refund may affect one vendor without cancelling the whole checkout;
-- vendor dashboards must expose only that vendor's slice;
-- commission, settlement, and analytics are naturally vendor-scoped.
+- one vendor may own multiple stores;
+- one checkout may include multiple stores;
+- grouping is store/vendor scoped according to fulfillment rules;
+- vendor APIs operate only on authorized VendorOrders;
+- a vendor cannot access another vendor's slice.
 
-## 3. Core Entities
+## 3. Product and Inventory Assumptions
 
-| Entity | Purpose | Important Concepts |
-| --- | --- | --- |
-| `Order` | customer-level checkout record | customer, grand totals, currency, overall/payment status |
-| `VendorOrder` | vendor/store-specific fulfillment record | vendor/store, subtotal, fees, fulfillment state |
-| `OrderItem` | immutable purchased-item snapshot | product/variant refs, name/SKU snapshot, price, qty |
-| `InventoryReservation` | temporary/confirmed stock hold | item, qty, expiry, status |
-| `PaymentIntent` | expected customer payment | order, amount, currency, status |
-| `PaymentAllocation` | financial split | vendor-order/platform amounts |
-| `Shipment` | delivery/fulfillment unit | vendor order, provider, tracking, status |
-| `Refund` | economic reversal | payment/order/vendor-order/item references, amount, state |
+Products support variants and inventory is tracked at variant level.
 
-## 4. Parent Order Responsibilities
+SKU uniqueness is per store.
 
-The parent order owns the customer-level view of one checkout:
+Inventory reservation is authoritative backend behavior, not a frontend cart guarantee.
 
-- customer identity;
-- billing/delivery snapshots as required;
-- overall grand total;
-- currency;
-- payment state;
-- customer-facing aggregate status;
-- references to vendor orders.
+## 4. Inventory Reservation
 
-The parent order should not try to make all vendor fulfillment statuses identical.
+Standard reservation window: **15 minutes**.
 
-## 5. Vendor Order Responsibilities
-
-A `VendorOrder` owns the store/vendor-specific portion:
-
-- store/vendor ID;
-- item lines;
-- vendor subtotal;
-- allocated discounts/fees;
-- fulfillment status;
-- shipment(s);
-- vendor cancellation/refund implications;
-- vendor financial allocation.
-
-Vendor APIs should normally operate on `VendorOrder`, not the entire parent order.
-
-## 6. Order Item Snapshot
-
-Each item should preserve historical purchase data even if catalog data changes later.
-
-Typical snapshot:
+Flow:
 
 ```text
-productId
-variantId
-productName
-sku
-selected attributes
-unitPrice
-quantity
-discount allocation
-tax allocation if applicable
-line total
-currency
+checkout validation
+  -> atomic/concurrency-safe stock check
+  -> reserve variant quantities for 15 minutes
+  -> create order/payment flow
+  -> payment success commits reservation
+  -> failure/expiry/cancellation releases reservation
 ```
 
-The live product remains useful for navigation/reference, but is not the historical financial source of truth.
+Reservations must have explicit expiry and idempotent commit/release behavior.
 
-## 7. Status Models
+## 5. Checkout Flow
 
-Illustrative parent order states:
+1. authenticate customer;
+2. load cart;
+3. verify stores/vendors active and approved;
+4. verify products/variants are purchasable;
+5. load current server-authoritative prices;
+6. check/reserve inventory;
+7. apply platform promotion and tax policy;
+8. compute per-store delivery fees;
+9. resolve commission/gateway-fee allocation;
+10. snapshot product and financial data;
+11. create parent Order;
+12. create VendorOrders and OrderItems;
+13. create PaymentIntent and allocations;
+14. return payment authorization;
+15. provider verification/webhook confirms payment;
+16. commit inventory;
+17. VendorOrders enter fulfillment.
+
+Checkout is idempotent.
+
+## 6. Vendor Acceptance
+
+Default behavior after successful payment is **automatic vendor-order acceptance** so the order can proceed without unnecessary manual blocking.
+
+A store/product/business rule may explicitly require manual processing. The state model therefore supports manual acceptance when configured, but it is not the default marketplace behavior.
+
+## 7. Shipment Model
+
+A VendorOrder may have **multiple shipments**.
+
+This supports:
+
+- partial fulfillment;
+- products leaving from different fulfillment locations later;
+- replacement shipments;
+- split delivery without distorting the parent order.
+
+Shipment contains provider/method, tracking reference, fee allocation, state, timestamps, and tracking events where supported.
+
+## 8. Logistics Fees
+
+Delivery is calculated per VendorOrder/store.
+
+A customer may therefore see:
 
 ```text
-PENDING_PAYMENT
-PAID
-PARTIALLY_FULFILLED
-FULFILLED
-PARTIALLY_CANCELLED
-CANCELLED
-PARTIALLY_REFUNDED
-REFUNDED
+Store A delivery: ₦X
+Store B delivery: ₦Y
+Parent delivery total: X + Y
 ```
 
-Illustrative vendor-order states:
+The parent order aggregates these amounts without pretending the purchase is one physical shipment.
 
-```text
-PENDING
-ACCEPTED
-PROCESSING
-SHIPPED
-DELIVERED
-CANCELLED
-PARTIALLY_REFUNDED
-REFUNDED
-```
+## 9. Cancellation Policy
 
-Illustrative payment states:
+Cancellation is driven by VendorOrder/order state.
 
-```text
-PENDING
-REQUIRES_ACTION
-PROCESSING
-SUCCEEDED
-FAILED
-CANCELLED
-PARTIALLY_REFUNDED
-REFUNDED
-```
+Baseline:
 
-Illustrative reservation states:
-
-```text
-HELD
-COMMITTED
-RELEASED
-EXPIRED
-```
-
-Final state machines must define allowed transitions explicitly.
-
-## 8. Checkout Flow
-
-Recommended sequence:
-
-```text
-1. load current cart
-2. validate stores/vendors are active
-3. revalidate product/variant availability
-4. reprice server-side
-5. create immutable item snapshots
-6. reserve stock
-7. calculate parent and vendor-order totals
-8. create Order + VendorOrders + OrderItems
-9. create PaymentIntent
-10. return payment authorization/instructions
-11. provider webhook/server verification confirms payment
-12. commit reservations / mark order paid
-13. vendor fulfillment begins
-```
-
-`POST /checkout` must be idempotent.
-
-## 9. Inventory Reservation
-
-Do not decrement or reserve inventory solely from frontend/cart assumptions.
-
-Rules:
-
-- reserve using current server state;
-- reservation has expiry/release behavior;
-- payment confirmation commits the reservation;
-- failed/abandoned payment releases stock;
-- all reservation actions are idempotent;
-- concurrency protection prevents overselling.
-
-## 10. Payment Relationship
-
-The customer may make one parent-level payment even when many vendors are involved.
-
-The platform records allocations:
-
-```text
-PaymentIntent
-  -> VendorOrder A allocation
-  -> VendorOrder B allocation
-  -> platform allocation
-```
-
-This makes partial refund and future settlement deterministic.
-
-## 11. Fulfillment
-
-Vendors fulfill independently.
-
-A customer order may therefore have:
-
-- Store A shipped;
-- Store B still processing;
-- Store C cancelled/refunded.
-
-The parent order derives a meaningful aggregate customer state rather than forcing all suborders into one status.
-
-## 12. Shipment Model
-
-A shipment belongs to a vendor order.
-
-The design should permit more than one shipment per vendor order if future partial fulfillment requires it, even if MVP restricts it to one.
-
-Shipment metadata may include:
-
-- provider;
-- external shipment reference;
-- tracking number;
-- fee;
-- state;
-- timestamps;
-- tracking events.
-
-## 13. Cancellation Matrix
-
-| Situation | Expected Behavior |
+| State | Behavior |
 | --- | --- |
-| Before payment | cancel parent order and release all reservations |
-| Paid, before processing | policy may allow item/vendor-order cancellation + refund |
-| One vendor cannot fulfill | cancel affected VendorOrder, refund allocation, others continue |
-| Already shipped | likely transition to return/refund workflow instead of cancellation |
-| All vendor orders cancelled | parent becomes cancelled/refunded as appropriate |
+| `PENDING_PAYMENT` | immediate cancellation; release reservation |
+| paid but not processing | automatic cancellation or short grace policy where allowed; refund if captured |
+| `PROCESSING` | cancellation request evaluated by policy/vendor/admin |
+| `SHIPPED` | ordinary cancellation disabled; use return workflow |
+| `DELIVERED` | return/refund policy applies |
 
-The exact cancellation window is a business decision still to confirm.
+A cancellation request is not allowed to bypass a shipment/return state machine.
 
-## 14. Refund Design
+## 10. Return / RMA Model
 
-Refunds must reference the original financial allocation being reversed.
+CartNest models returns from the beginning even if the complete customer UI is delivered later.
 
-Rules:
+Core concepts:
 
-- a partial refund can target vendor orders/items;
-- refund amount cannot exceed remaining refundable amount;
-- refund creation is not the same as refund completion;
-- final order/payment statuses derive from successful provider outcomes;
-- vendor/platform allocation reversal must be deterministic.
+- `ReturnRequest`;
+- `ReturnItem`;
+- return reason;
+- requested quantity;
+- evidence/media references where later required;
+- return status/history;
+- received/inspection state where applicable;
+- linked Refund(s).
 
-## 15. Customer View
+Suggested states:
 
-The customer should see:
+```text
+REQUESTED
+APPROVED
+REJECTED
+IN_TRANSIT
+RECEIVED
+INSPECTED
+COMPLETED
+CANCELLED
+```
 
-- one order number;
-- parent payment/total summary;
-- vendor/store sections;
-- per-vendor fulfillment state;
-- potentially multiple tracking numbers;
-- cancellation/refund state by relevant section.
+The exact return window/reasons remain configurable marketplace policy.
 
-## 16. Vendor View
+## 11. Refund Authority
 
-A vendor sees only its authorized vendor order data:
+Vendor users with explicit refund permission may request/approve refunds within configured limits.
 
-- items;
-- quantities;
-- buyer delivery information required for fulfillment;
-- allowed financial summary;
-- shipment controls;
-- fulfillment actions;
-- refund/cancellation state relevant to that vendor.
+Admin users may review or override according to permission. High-risk/manual overrides are audited.
 
-No vendor may read another vendor's order slice.
+Provider confirmation determines financial completion.
 
-## 17. Admin View
+## 12. Review Eligibility
 
-Admin may view parent + vendor-order composition for operational oversight, subject to permission and audit requirements.
+A buyer may review only after an eligible purchased item/order has reached **DELIVERED** state.
 
-Admin overrides must be explicit rather than bypassing state machines silently.
+CartNest supports:
 
-## 18. Idempotency and Concurrency
+- product review/rating;
+- store/vendor review/rating.
+
+The backend proves eligibility from order history; the client cannot submit an arbitrary product/store ID and claim purchase eligibility.
+
+A policy must prevent duplicate/abusive reviews for the same eligible purchase according to the final review-key design.
+
+## 13. Parent Order Status
+
+Parent status is derived from payment and VendorOrder states rather than forcing all vendors to move together.
+
+Example:
+
+```text
+Vendor A -> DELIVERED
+Vendor B -> SHIPPED
+Vendor C -> CANCELLED/REFUNDED
+Parent   -> PARTIALLY_FULFILLED / derived customer state
+```
+
+## 14. Idempotency and Concurrency
 
 Required controls:
 
-- checkout uses an idempotency key;
-- stock reservation uses transaction/locking/atomic-update strategy;
-- payment webhooks are deduplicated;
-- fulfillment transitions verify expected current state;
-- cancellation/refund creation is retry-safe.
+- idempotent checkout;
+- concurrency-safe inventory reservation;
+- idempotent payment initialization;
+- webhook deduplication;
+- expected-state checks for fulfillment transitions;
+- retry-safe cancellation/refund/return creation.
 
-## 19. Auditability
+## 15. Audit
 
-Audit significant transitions such as:
+Audit significant state changes, including:
 
-- manual order override;
-- vendor acceptance/rejection where applicable;
-- cancellation;
-- shipment creation/status override;
-- refund request/completion;
+- manual acceptance/rejection;
+- cancellation decisions;
+- shipment status override;
+- return approval/rejection;
+- refund approval/override;
 - admin intervention.
 
-## 20. Open Business Decisions
+## Final Decision
 
-- can one vendor own multiple stores?;
-- can one vendor order produce multiple shipments in MVP?;
-- does vendor acceptance happen automatically after payment or manually?;
-- cancellation window/policy;
-- delivery-fee calculation across vendors;
-- whether platform collects funds and settles vendors or gateway split settlement is used;
-- returns/RMA workflow.
-
-## 21. Final Baseline
-
-CartNest models one customer checkout as a parent order composed of independent vendor orders. Inventory, fulfillment, shipment, refunds, and financial allocation follow those boundaries so vendors remain isolated while customers retain a single coherent checkout experience.
+CartNest supports one multi-vendor cart and checkout, decomposed into parent and vendor orders; 15-minute variant-level inventory reservation; automatic fulfillment entry by default; multiple shipments per VendorOrder; state-based cancellation; first-class return/RMA modeling; and delivered-purchase-only product/store reviews.

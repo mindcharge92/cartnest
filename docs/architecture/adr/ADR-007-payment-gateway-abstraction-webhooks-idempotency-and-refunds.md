@@ -1,336 +1,214 @@
-# ADR-007: Payment Gateway Abstraction, Webhooks, Idempotency, and Refunds
+# ADR-007: Payment Gateway Abstraction, Routing, Webhooks, Idempotency, Refunds, and Settlement
 
-**Status:** Proposed baseline  
-**Date:** 4 September 2026  
-**Gateways:** Paystack + Flutterwave  
+**Status:** Accepted  
+**Accepted:** 5 September 2026  
+**Gateways:** Paystack primary, Flutterwave secondary  
 **Currency:** NGN first  
 **Related:** ADR-005, ADR-006, ADR-010
 
-## Proposed Decision
+## Decision
 
-Implement a provider-neutral payment module with adapters for Paystack and Flutterwave.
+CartNest implements a provider-neutral payment module. **Paystack is the default provider** and **Flutterwave is the secondary/fallback provider**.
 
-A `PaymentIntent` represents the platform's desired customer payment. A `PaymentAttempt` records one interaction with one provider. Verified provider webhooks and server-side provider verification drive final payment confirmation.
+Customers do not select the gateway directly; CartNest performs internal routing.
 
-Automatic provider fallback is allowed only when the previous attempt is known not to have charged the customer. Ambiguous outcomes must be reconciled before another charge can be attempted.
+A `PaymentIntent` represents the desired customer payment. A `PaymentAttempt` records one provider attempt. Verified webhooks and server-side verification—not browser redirects—drive final payment state.
 
-## 1. Goals
+Automatic fallback is allowed only when the prior outcome is definitively non-chargeable. Ambiguous outcomes are reconciled before another provider attempt.
 
-The payment design must:
-
-- support Paystack and Flutterwave without coupling orders to provider-specific SDKs;
-- prevent duplicate charges;
-- survive webhook redelivery;
-- verify amount and currency server-side;
-- support card, bank transfer, USSD, and other channels exposed by approved providers;
-- support partial/full refunds;
-- preserve an auditable payment history;
-- support future provider replacement or additional gateways;
-- allow safe reconciliation when network/provider outcomes are uncertain.
-
-## 2. Architecture
+## 1. Payment Domain
 
 ```text
 Orders
-  |
-  v
-Payment Module
-  |
-  +--> PaymentIntent
-  +--> PaymentAttempt
-  +--> PaymentAllocation
-  +--> Refund
-  +--> ProviderEvent Inbox
-  |
-  +--> PaystackAdapter
-  +--> FlutterwaveAdapter
-           |
-           v
-      Provider APIs/Webhooks
+  -> Payment Module
+       -> PaymentIntent
+       -> PaymentAttempt
+       -> PaymentAllocation
+       -> ProviderEvent
+       -> Refund
+       -> Settlement records/read model
+       -> PaystackAdapter
+       -> FlutterwaveAdapter
 ```
 
-Orders know the platform payment abstraction, not Paystack/Flutterwave implementation types.
+Orders and public API contracts never depend on gateway SDK-specific types.
 
-## 3. Provider Interface
+## 2. Provider Routing
 
-Conceptual interface:
+Baseline routing:
+
+1. choose Paystack;
+2. initialize attempt;
+3. if initialization definitively fails before any possible charge, retry/fallback policy may choose Flutterwave;
+4. if result is unknown/processing/timeout after provider acceptance, reconcile before any new charge;
+5. if successful, never retry another provider.
+
+Provider health/routing may become dynamic later without changing the payment domain contract.
+
+## 3. Customer Gateway Choice
+
+MVP does not expose a Paystack-vs-Flutterwave selector to the buyer. The customer chooses a payment method/channel made available by CartNest; provider selection remains an infrastructure/routing concern.
+
+## 4. Confirmation Rule
+
+Never trust a frontend callback alone.
+
+Payment succeeds only after backend evidence establishes:
+
+- authentic provider/webhook or verified provider API response;
+- known attempt/reference;
+- internal order/payment reference match;
+- exact expected amount;
+- exact expected currency;
+- provider success state.
+
+Mismatch or uncertainty cannot transition an order to paid.
+
+## 5. Idempotency
+
+Payment initialization and refund creation are idempotent.
+
+Same idempotency key + same semantic request returns the same logical result. Reusing the key with conflicting payload is rejected.
+
+Provider webhook deduplication is separate and mandatory.
+
+## 6. Webhook Inbox
+
+Persist provider events with:
+
+- provider;
+- external event ID where available;
+- fallback fingerprint;
+- event type;
+- received/processed timestamp;
+- linked PaymentAttempt/Refund;
+- normalized processing state.
+
+Process verified events transactionally/idempotently. A delayed duplicate event cannot undo a later authoritative state.
+
+## 7. Paystack / Flutterwave Adapter Contract
+
+Provider adapters expose normalized operations such as:
 
 ```ts
-interface PaymentProvider {
-  initialize(input: InitializePaymentInput): Promise<InitializePaymentResult>;
-  verify(input: VerifyPaymentInput): Promise<VerifiedPaymentResult>;
-  refund(input: RefundPaymentInput): Promise<RefundResult>;
-  verifyWebhook(input: WebhookVerificationInput): Promise<boolean>;
-  normalizeWebhook(input: unknown): NormalizedProviderEvent;
-}
+initialize()
+verify()
+refund()
+verifyWebhook()
+normalizeWebhook()
+mapStatus()
 ```
 
-The real interface may vary, but it must normalize provider differences before they reach domain logic.
+Provider credentials are backend-only and provider payloads are translated before reaching domain logic.
 
-## 4. Core Payment Entities
+## 8. Supported Channels
 
-| Entity | Purpose |
-| --- | --- |
-| `PaymentIntent` | one expected customer payment for an order and exact amount/currency |
-| `PaymentAttempt` | one attempt using one provider/channel |
-| `PaymentAllocation` | maps successful payment value to vendor orders/platform components |
-| `ProviderEvent` | deduplicated webhook/inbox record |
-| `Refund` | requested/processing/completed reversal |
+The architecture supports NGN channels such as:
 
-## 5. Payment Intent
+- card;
+- bank transfer;
+- USSD;
+- other approved provider channels.
 
-A payment intent should preserve:
+Actual channel exposure is configuration/capability-driven rather than hard-coded into order entities.
 
-- internal ID;
-- parent order ID;
-- expected amount;
-- currency;
-- state;
-- idempotency context;
-- created/updated timestamps.
+## 9. Gateway Fee
 
-Once created for a specific order total, the expected amount must not be silently changed after an attempt begins. If checkout economics change, create a new valid payment flow according to policy.
+MVP gateway transaction fee is allocated to the **vendor**, according to ADR-005.
 
-## 6. Payment Attempt
+The fee is explicit and snapshotted; it is not silently merged into commission.
 
-Each provider attempt records:
+Future business policy may change who bears fees, so the financial model stores applied policy/amount rather than assuming it forever.
 
-- payment intent ID;
-- provider;
-- provider reference;
-- channel where known;
-- amount/currency sent;
-- normalized state;
-- provider initialization metadata required for audit/reconciliation;
-- timestamps;
-- failure category where applicable.
+## 10. Commission and Allocation
 
-Provider secret material is never exposed through public APIs.
+Payment allocations preserve vendor/platform economics, including:
 
-## 7. Confirmation Rule: Never Trust the Browser
+- VendorOrder gross allocation;
+- platform commission;
+- gateway fee;
+- delivery/tax components where relevant;
+- vendor net allocation.
 
-A frontend redirect/callback reporting success is not enough to mark an order paid.
+Commission is configurable per vendor/category and snapshotted when applied.
 
-A payment becomes `SUCCEEDED` only after backend evidence confirms the provider transaction matches the platform intent.
+## 11. Vendor Settlement
 
-Validate at minimum:
+Preferred provider integration uses gateway subaccounts/split settlement where supported and commercially appropriate.
 
-```text
-verified provider/authentic webhook
-+ provider reference matches known attempt
-+ internal order/payment reference matches
-+ amount equals expected amount
-+ currency equals expected currency
-+ provider state is successful
-```
+Settlement is delivery-gated: funds become eligible after confirmed delivery, then move through a configurable scheduled settlement process. Baseline planning target is T+2 after delivery eligibility, subject to gateway settlement capabilities and returns/risk policy.
 
-Where appropriate, call the provider verification endpoint before final transition.
+Internal settlement/allocation records remain authoritative for reconciliation even when the provider moves funds.
 
-## 8. Initialization Flow
+## 12. Refund Workflow
 
-```text
-POST /api/v1/orders/{orderId}/payment-intents
-  -> authenticate customer
-  -> load authorized order
-  -> verify order is payable
-  -> verify exact amount/currency
-  -> enforce idempotency key
-  -> create/find PaymentIntent
-  -> select approved provider
-  -> create PaymentAttempt
-  -> provider.initialize(...)
-  -> persist provider reference
-  -> return safe authorization/checkout data
-```
-
-## 9. Webhook Flow
-
-```text
-provider webhook
-  -> preserve raw body if signature requires it
-  -> verify signature/authenticity
-  -> reject invalid event
-  -> derive provider event identity
-  -> deduplicate ProviderEvent
-  -> locate PaymentAttempt/Intent
-  -> verify expected amount/currency/reference
-  -> call provider verify endpoint when policy requires
-  -> transition payment state transactionally
-  -> update order/payment allocation state
-  -> emit internal PaymentSucceeded/PaymentFailed event
-  -> acknowledge provider quickly
-```
-
-Webhook processing must be idempotent.
-
-## 10. Provider Event Inbox
-
-Persist a provider-event record before/while processing so repeated delivery is safe.
-
-Useful fields:
-
-- provider;
-- external event ID when available;
-- fallback fingerprint/hash;
-- event type;
-- linked attempt/refund;
-- received time;
-- processed time;
-- processing status;
-- limited protected metadata.
-
-Raw provider payload retention must follow privacy/security/retention policy.
-
-## 11. Retry and Failover Safety
-
-| Previous Outcome | Retry Same Provider? | Switch Provider? |
-| --- | --- | --- |
-| definitive initialization failure before any charge | Yes | Yes |
-| provider explicitly reports failed/no charge | Policy-based | Yes |
-| network timeout after initialization | Reconcile first | No automatic fallback |
-| unknown/processing | No duplicate charge | No automatic fallback |
-| succeeded | No | No |
-
-The platform must prefer temporary uncertainty over risking a second customer charge.
-
-## 12. Idempotency
-
-Payment initialization accepts an idempotency key.
-
-Same key + same semantic request returns the same logical payment result.
-
-Same key + conflicting request is rejected.
-
-Refund creation is also idempotent.
-
-Provider webhook deduplication is separate from client idempotency and must also be implemented.
-
-## 13. Payment State Machine
-
-Illustrative states:
-
-```text
-PENDING
-REQUIRES_ACTION
-PROCESSING
-SUCCEEDED
-FAILED
-CANCELLED
-PARTIALLY_REFUNDED
-REFUNDED
-```
-
-Transitions must be explicit. For example:
-
-```text
-SUCCEEDED -> FAILED
-```
-
-must not occur because a delayed duplicate failure webhook arrives after confirmed success unless the provider semantics explicitly justify a different reconciled state.
-
-## 14. Payment Allocation
-
-After successful payment, record how value maps to:
-
-- each vendor order;
-- platform fees/commission;
-- delivery/tax components where accounting requires them.
-
-Allocations must reconcile exactly with the captured customer amount according to ADR-005.
-
-## 15. Refund Workflow
-
-A refund is a separate state machine.
-
-Suggested flow:
+CartNest supports partial/full refunds.
 
 ```text
 refund request
-  -> validate authorization/policy
-  -> calculate remaining refundable amount
-  -> create idempotent Refund
-  -> provider refund request
-  -> PROCESSING
-  -> provider confirmation/reconciliation
-  -> SUCCEEDED or FAILED
-  -> update payment/order/vendor-order financial states
+ -> authorization + policy + refundable balance
+ -> idempotent Refund record
+ -> provider refund
+ -> PROCESSING
+ -> provider confirmation/reconciliation
+ -> SUCCEEDED / FAILED
+ -> order/vendor/payment/settlement updates
 ```
 
-Refund request creation does not mean money has been returned.
+Vendor users may perform refunds within explicit permissions/limits; admins may review/override.
 
-## 16. Partial Refund Rules
+## 13. Failover Matrix
 
-- refund references original payment/allocation;
-- amount cannot exceed remaining refundable value;
-- refund may be attributed to item/vendor-order components;
-- vendor/platform settlement implications are preserved;
-- multiple partial refunds must reconcile to the original capture.
+| Previous Attempt Outcome | Same Provider Retry | Other Provider |
+| --- | --- | --- |
+| definitive pre-charge initialization failure | allowed | allowed |
+| provider confirms failed/no charge | policy-based | allowed |
+| timeout after provider accepted request | reconcile first | blocked until resolved |
+| unknown / processing | blocked | blocked |
+| succeeded | never | never |
 
-## 17. Security
+Avoiding a duplicate customer charge is more important than instantly recovering from uncertainty.
 
-- verify webhook signatures with the provider-required algorithm/raw body;
-- keep provider secret keys backend-only;
-- use HTTPS;
-- validate amount/currency/reference;
-- redact sensitive provider data from logs;
-- never trust browser payment state;
-- never allow a client to supply the authoritative charge amount without server recomputation;
-- rotate compromised provider keys.
+## 14. Reconciliation
 
-## 18. Reconciliation
+CartNest must support scheduled/manual reconciliation for:
 
-CartNest needs a reconciliation mechanism for ambiguous/long-pending attempts.
+- ambiguous attempts;
+- missed/delayed webhooks;
+- provider/internal amount mismatch;
+- refunds stuck in processing;
+- settlement discrepancy.
 
-Reconciliation may:
+Discrepancies generate operational work/alerts rather than silent mutation of financial truth.
 
-- query provider verification APIs;
-- compare internal references and amounts;
-- resolve `PROCESSING`/unknown attempts;
-- detect discrepancies;
-- create operational alerts rather than silently editing financial truth.
+## 15. Observability
 
-Webhook downtime must be recoverable through verification/reconciliation.
+Track:
 
-## 19. Observability
-
-Track metrics/events such as:
-
-- initialization success/failure by provider;
-- provider latency;
-- verified/invalid webhook count;
-- duplicate webhook count;
-- ambiguous attempt age/count;
-- payment success rate;
-- refund success/failure;
+- payment initialization success by provider/channel;
+- provider latency/error rate;
+- webhook verification failures;
+- duplicate event rate;
+- ambiguous-attempt age;
+- payment success/failure rate;
+- refund outcomes;
+- settlement discrepancies;
 - amount/currency mismatch incidents.
 
-Logs should include internal payment ID, order ID, provider reference, and request/event ID where safe.
+## 16. Required Tests
 
-## 20. Testing Requirements
+- Paystack selected as default;
+- safe fallback to Flutterwave on definitive non-charge failure;
+- ambiguous result blocks fallback;
+- duplicate initialization creates one logical intent;
+- forged webhook rejected;
+- duplicate webhook harmless;
+- unknown reference/amount/currency mismatch cannot mark paid;
+- partial refund cannot exceed remaining balance;
+- duplicate refund cannot double-refund;
+- settlement cannot exceed vendor net allocation;
+- both provider adapters satisfy normalization contract tests.
 
-- [ ] duplicate initialization with same idempotency key creates one logical payment intent;
-- [ ] forged webhook is rejected;
-- [ ] duplicate webhook is harmless;
-- [ ] unknown provider reference does not mark order paid;
-- [ ] amount mismatch does not mark order paid;
-- [ ] currency mismatch does not mark order paid;
-- [ ] success transitions order only once;
-- [ ] ambiguous attempt blocks unsafe fallback;
-- [ ] refund cannot exceed refundable balance;
-- [ ] duplicate refund request cannot double-refund;
-- [ ] both provider adapters pass normalization contract tests.
+## Final Decision
 
-## 21. Open Decisions
-
-- default provider selection/routing;
-- whether buyer may explicitly select provider;
-- exact failover policy;
-- gateway fee ownership;
-- settlement/payout model for vendors;
-- exact card/bank transfer/USSD channel exposure in MVP;
-- reconciliation schedule;
-- refund authority matrix.
-
-## 22. Final Baseline
-
-CartNest will treat payments as an internal provider-neutral domain. Provider webhooks and server verification—not the browser—confirm payment success. Idempotency, deduplication, exact amount/currency validation, reconciliation, and safe retry classification are mandatory for financial correctness.
+CartNest routes payments internally with Paystack primary and Flutterwave secondary, confirms payment only with backend evidence, uses safe failover, idempotent mutations and webhook deduplication, supports partial refunds, records configurable vendor/category commission, allocates gateway fees to vendors for MVP, and targets delivery-gated scheduled split settlement.

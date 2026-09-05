@@ -1,112 +1,136 @@
-# ADR-009: Product Media Upload and Object Storage
+# ADR-009: Product Media Upload and Cloudflare R2 Object Storage
 
-**Status:** Proposed baseline  
-**Date:** 5 September 2026
-
-## Context
-
-Products and stores require images and potentially future video/media. PostgreSQL should store relational metadata, not large binary objects.
-
-Media upload must also prevent users from writing arbitrary objects, overwriting another vendor's content, or using unrestricted upload URLs.
+**Status:** Accepted  
+**Accepted:** 5 September 2026  
+**Initial Provider:** Cloudflare R2
 
 ## Decision
 
-Use S3-compatible object storage for binary media and PostgreSQL for media metadata.
+CartNest stores product/store binary media in **Cloudflare R2** and relational media metadata in PostgreSQL.
 
-The backend controls upload authorization. The browser may upload directly to object storage using a short-lived presigned upload request when supported.
+Uploads use a backend-authorized, short-lived direct-upload workflow. Fastify verifies the authenticated vendor/store scope and creates a server-controlled object key/upload authorization. The browser uploads directly to R2 rather than proxying normal product image bytes through the Fastify process.
 
-## Target Flow
+## 1. Flow
 
 ```text
 Vendor browser
   -> POST /api/v1/media/uploads
-  -> Fastify verifies identity, vendor ownership, MIME/size policy
-  -> Fastify creates upload intent / object key
-  -> returns short-lived presigned upload data
-  -> browser uploads object
-  -> browser/API confirms completion
-  -> backend verifies metadata where necessary
-  -> media record becomes ACTIVE
+  -> Fastify authenticates + authorizes vendor/store/product
+  -> validates requested media type/size policy
+  -> creates upload intent + server-generated object key
+  -> returns short-lived presigned R2 upload information
+  -> browser uploads directly to Cloudflare R2
+  -> client/backend confirms completion
+  -> backend verifies object metadata where required
+  -> Media record becomes ACTIVE
 ```
 
-## Storage Key Strategy
+Permanent R2 credentials are never exposed to the browser.
 
-Keys must not rely only on original filenames.
+## 2. Why R2
 
-Example:
+R2 provides an S3-compatible object-storage model suitable for the approved presigned/direct-upload architecture. The application should keep provider-specific code behind a storage adapter so moving to another S3-compatible provider does not require changes to Product/Store domain contracts.
+
+## 3. Storage Adapter
+
+Define an internal object-storage abstraction for operations such as:
 
 ```text
-vendors/{vendorId}/stores/{storeId}/products/{productId}/{mediaId}.webp
+createPresignedUpload
+headObject / verifyObject
+createReadUrl or public URL mapping
+copy/move if required
+mark/delete object
 ```
 
-Original filename may be retained as metadata but not trusted as the storage key.
+Product/catalog code references `Media` IDs/metadata, not R2 SDK response types.
 
-## Metadata
+## 4. Key Strategy
 
-Recommended media record:
+Keys are server-generated and scoped. Example:
 
-- id;
-- owner type;
-- owner ID;
+```text
+vendors/{vendorId}/stores/{storeId}/products/{productId}/{mediaId}/original.webp
+```
+
+Do not use the original filename as canonical identity.
+
+## 5. PostgreSQL Media Record
+
+Recommended fields include:
+
+- media ID;
+- owner type / owner ID;
+- vendor/store scope;
+- R2 bucket/logical storage location;
 - object key;
-- bucket;
 - MIME type;
 - byte size;
-- width/height where available;
-- original filename;
+- dimensions where available;
+- checksum where useful;
+- original filename metadata;
 - alt text;
 - display order;
 - status;
-- createdBy;
-- createdAt;
-- deletedAt where required.
+- createdBy/createdAt;
+- deletedAt/lifecycle metadata.
 
-## Security Rules
+## 6. Upload Security
 
-- validate MIME type and extension policy;
-- enforce maximum size;
-- generate server-controlled object keys;
-- authorize vendor/store ownership before creating upload intent;
-- use short-lived presigned credentials;
-- never expose permanent provider credentials to the browser;
-- block executable/unapproved content types;
-- consider malware/image validation for risky content;
-- ensure vendor A cannot attach media to vendor B resources.
+Required controls:
 
-## Image Processing
+- authorize vendor/store/product ownership before issuing upload permission;
+- short expiration;
+- server-generated key;
+- allowed MIME/type list;
+- maximum object size;
+- prevent arbitrary bucket/key overwrite;
+- do not trust browser-declared MIME alone after upload;
+- block executable/unapproved media;
+- ensure vendor A cannot attach media to vendor B resources;
+- log/audit abuse-relevant events without exposing credentials.
 
-MVP may store original validated images and optionally derive optimized variants.
+## 7. Image Processing
 
-Future processing may create:
+MVP may preserve validated originals and generate optimized variants according to frontend needs.
+
+Future asynchronous media processing may produce:
 
 - thumbnails;
-- storefront cards;
-- product detail images;
+- catalog-card sizes;
+- product detail sizes;
 - WebP/AVIF variants.
 
-Media processing can later move to an asynchronous worker without changing the public product model.
+The canonical `Media` identity remains stable while physical variants evolve.
 
-## Deletion
+## 8. Delivery/CDN
 
-Deleting a product should not blindly delete media synchronously if order/history/audit views still reference it.
+Public media may be served through an approved R2/public-domain/CDN configuration.
 
-Use a lifecycle policy:
+Do not persist a transient CDN URL as the only identity. Persist object key/media ID and derive delivery URL through the media/storage layer.
 
-1. detach or mark media deleted;
-2. verify no retained business record requires it;
-3. remove binary object asynchronously;
-4. preserve required audit metadata.
+## 9. Deletion and Retention
 
-## CDN
+Deletion is lifecycle-based:
 
-A CDN may front public product/store images. CDN URL shape must not become the persistent identity; the object key/media ID remains canonical.
+1. mark/detach Media record;
+2. ensure retained orders/audit do not require the object;
+3. enqueue/perform object deletion;
+4. retain only metadata required by policy.
 
-## Open Questions
+NDPR/privacy and business record retention requirements apply.
 
-- storage provider;
-- allowed image types;
-- maximum upload size;
-- whether video is in MVP;
-- moderation flow;
-- image transformation provider/library;
-- retention policy after deletion.
+## 10. Still Configurable Before UI Completion
+
+The provider is decided, but these values remain configuration/product policy:
+
+- allowed image formats;
+- max image size/count per product;
+- video support (not assumed in MVP);
+- image transformation pipeline;
+- moderation/scanning requirements;
+- retention duration for detached objects.
+
+## Final Decision
+
+Cloudflare R2 is CartNest's initial object-storage provider. Fastify authorizes vendor-scoped upload intents and the browser uploads directly using short-lived presigned authorization. PostgreSQL stores canonical media metadata, and storage-provider details remain behind an adapter.
