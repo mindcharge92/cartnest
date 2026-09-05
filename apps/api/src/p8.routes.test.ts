@@ -8,7 +8,7 @@ afterEach(async () => {
 });
 
 describe("P8 logistics route contracts", () => {
-  it("registers shipping quote, fulfillment, shipment, and buyer tracking operations", async () => {
+  it("registers shipping quote, station discovery, fulfillment, shipment, and buyer tracking operations", async () => {
     const app = buildApp({ logger: false });
     apps.push(app);
     await app.ready();
@@ -16,6 +16,7 @@ describe("P8 logistics route contracts", () => {
     const specification = app.swagger();
     expect(specification.paths).toHaveProperty("/api/v1/stores/{storeId}/fulfillment-profile");
     expect(specification.paths).toHaveProperty("/api/v1/variants/{variantId}/shipping-profile");
+    expect(specification.paths).toHaveProperty("/api/v1/logistics/stations");
     expect(specification.paths).toHaveProperty("/api/v1/logistics/quotes");
     expect(specification.paths).toHaveProperty("/api/v1/vendor-orders/{vendorOrderId}/shipments");
     expect(specification.paths).toHaveProperty("/api/v1/orders/{orderId}/shipments");
