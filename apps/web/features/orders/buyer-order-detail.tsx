@@ -4,13 +4,23 @@ import type { OrderDto, VendorOrderDto } from "@repo/contracts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
-import { apiErrorMessage, ordersApi } from "../../lib/api";
+import { apiErrorCode, apiErrorMessage, ordersApi } from "../../lib/api";
 import { formatMoney } from "../catalog/catalog-utils";
 import { isUnpaidOpenOrder, orderStatusClass, orderStatusLabel } from "./order-ui";
 
 function variantLabel(item: VendorOrderDto["items"][number]): string {
   if (item.variantAttributes.length === 0) return "Standard variant";
   return item.variantAttributes.map((value) => `${value.optionName}: ${value.value}`).join(" · ");
+}
+
+function reservationExpired(order: OrderDto): boolean {
+  return Boolean(
+    order.reservationExpiresAt && new Date(order.reservationExpiresAt).getTime() <= Date.now(),
+  );
+}
+
+function paymentAttemptActive(order: OrderDto): boolean {
+  return ["REQUIRES_ACTION", "PROCESSING"].includes(order.paymentIntent.status);
 }
 
 export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
@@ -37,7 +47,7 @@ export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
 
   async function cancelOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!order || !isUnpaidOpenOrder(order.status, order.paymentStatus)) return;
+    if (!order || !isUnpaidOpenOrder(order.status, order.paymentStatus) || paymentAttemptActive(order)) return;
     setCancelling(true);
     setMessage(null);
     try {
@@ -46,7 +56,12 @@ export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
       setCancelReason("");
       setMessage("The unpaid order was cancelled and its remaining held inventory was released.");
     } catch (caught) {
-      setMessage(apiErrorMessage(caught, "CartNest could not cancel this order."));
+      if (apiErrorCode(caught) === "ORDER_PAYMENT_ACTIVE") {
+        setMessage("A payment attempt became active before cancellation completed. Check the payment status first; CartNest did not release the reservation.");
+        try { setOrder(await ordersApi.get(order.id)); } catch { /* Keep the cancellation error. */ }
+      } else {
+        setMessage(apiErrorMessage(caught, "CartNest could not cancel this order."));
+      }
     } finally {
       setCancelling(false);
     }
@@ -65,7 +80,11 @@ export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
     return <main className="commercePage"><ErrorState title="Order unavailable" message={message ?? "CartNest could not load this order."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} /></main>;
   }
 
-  const cancellable = isUnpaidOpenOrder(order.status, order.paymentStatus);
+  const openUnpaid = isUnpaidOpenOrder(order.status, order.paymentStatus);
+  const activePayment = paymentAttemptActive(order);
+  const expired = reservationExpired(order);
+  const cancellable = openUnpaid && !activePayment;
+  const canPay = openUnpaid && !activePayment && !expired && ["PENDING", "FAILED"].includes(order.paymentIntent.status);
 
   return (
     <main className="commercePage orderDetailPage">
@@ -149,18 +168,26 @@ export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
             <p>The payment intent is for {formatMoney(order.paymentIntent.amount)}. A browser redirect is never treated as proof of payment; verified provider state is authoritative.</p>
           </div>
 
+          {canPay ? (
+            <Link className="primaryButton" href={`/orders/${encodeURIComponent(order.id)}/payment`}>Pay securely</Link>
+          ) : activePayment ? (
+            <div className="paymentReconcileBox">
+              <strong>Payment attempt in progress</strong>
+              <p>Cancellation is blocked while a provider attempt may still complete. Reconcile the payment before taking another action.</p>
+              <Link className="secondaryButton" href={`/orders/${encodeURIComponent(order.id)}/payment`}>Check payment status</Link>
+            </div>
+          ) : expired && openUnpaid ? (
+            <p className="formMessage">The inventory reservation expired. A new payment cannot be initialized for this order.</p>
+          ) : null}
+
           {cancellable ? (
             <form className="cancelOrderForm" onSubmit={cancelOrder}>
               <label className="field">Cancellation reason <span className="fieldHint">Optional</span>
                 <textarea rows={3} minLength={2} maxLength={500} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} disabled={cancelling} placeholder="Reason for cancelling" />
               </label>
               <button className="dangerButton" disabled={cancelling}>{cancelling ? "Cancelling…" : "Cancel unpaid order"}</button>
-              <p className="fieldHint">Direct cancellation is limited to unpaid parent orders. Remaining held reservations are released atomically.</p>
+              <p className="fieldHint">Direct cancellation is limited to unpaid orders with no active provider attempt. Remaining held reservations are released atomically.</p>
             </form>
-          ) : null}
-
-          {order.paymentStatus === "PENDING" && !["CANCELLED"].includes(order.status) ? (
-            <p className="fieldHint">Payment initialization and provider handoff are implemented in the next frontend phase. This page does not display a fake paid state.</p>
           ) : null}
 
           <div className="orderMetadata">
