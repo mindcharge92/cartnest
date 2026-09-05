@@ -48,13 +48,20 @@ function attributes(value: unknown): Array<{ optionId: string; optionName: strin
   );
 }
 
-function mapVendorOrder(record: VendorOrderRecord | OrderRecord["vendorOrders"][number]): VendorOrderDto {
+function mapVendorOrder(
+  record: VendorOrderRecord | OrderRecord["vendorOrders"][number],
+  parent?: Pick<OrderDto, "status" | "paymentStatus">,
+): VendorOrderDto {
+  const orderState = "order" in record ? record.order : parent;
+  if (!orderState) throw new Error("Vendor order has no parent order state.");
   return {
     id: record.id,
     orderId: record.orderId,
     vendorId: record.vendorId,
     store: { id: record.store.id, name: record.store.name, slug: record.store.slug, vendorDisplayName: record.store.vendor.displayName },
     status: record.status,
+    orderStatus: orderState.status,
+    paymentStatus: orderState.paymentStatus,
     itemSubtotal: money(record.itemSubtotalAmountMinor, record.currency),
     discount: money(record.discountAmountMinor, record.currency),
     delivery: money(record.deliveryAmountMinor, record.currency),
@@ -104,7 +111,9 @@ function mapOrder(record: OrderRecord): OrderDto {
     tax: money(record.taxAmountMinor, record.currency),
     grandTotal: money(record.grandTotalAmountMinor, record.currency),
     deliveryAddress: record.deliveryAddressSnapshot as OrderDto["deliveryAddress"],
-    vendorOrders: record.vendorOrders.map(mapVendorOrder),
+    vendorOrders: record.vendorOrders.map((vendorOrder) =>
+      mapVendorOrder(vendorOrder, { status: record.status, paymentStatus: record.paymentStatus }),
+    ),
     paymentIntent: {
       id: paymentIntent.id,
       status: paymentIntent.status,
