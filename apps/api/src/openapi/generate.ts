@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildApp } from "../app.js";
+import { buildHardenedApp } from "../app.hardened.js";
 
 function sortObject(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortObject);
@@ -14,7 +14,7 @@ function sortObject(value: unknown): unknown {
   return value;
 }
 
-const app = buildApp(
+const app = buildHardenedApp(
   { logger: false },
   { database: async () => true, redis: async () => true },
 );
