@@ -26,13 +26,25 @@ export interface WishlistRepository {
 
 const includeItems = { items: { orderBy: { createdAt: "desc" as const } } } as const;
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002",
+  );
+}
+
 export class PrismaWishlistRepository implements WishlistRepository {
   constructor(private readonly database: DatabaseClient) {}
 
   async getOrCreate(userId: string): Promise<WishlistRecord> {
-    const existing = await this.findForUser(userId);
-    if (existing) return existing;
-    return this.database.wishlist.create({ data: { userId }, include: includeItems });
+    return this.database.wishlist.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+      include: includeItems,
+    });
   }
 
   async findForUser(userId: string): Promise<WishlistRecord | null> {
@@ -50,13 +62,25 @@ export class PrismaWishlistRepository implements WishlistRepository {
   }
 
   async addItem(wishlistId: string, productId: string, variantId: string | null): Promise<WishlistItemRecord> {
-    return this.database.$transaction(async (transaction) => {
-      const item = await transaction.wishlistItem.create({
-        data: { wishlistId, productId, variantId },
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const item = await transaction.wishlistItem.create({
+          data: { wishlistId, productId, variantId },
+        });
+        await transaction.wishlist.update({ where: { id: wishlistId }, data: { updatedAt: new Date() } });
+        return item;
       });
-      await transaction.wishlist.update({ where: { id: wishlistId }, data: { updatedAt: new Date() } });
-      return item;
-    });
+    } catch (error) {
+      // Variant-specific rows use the Prisma composite unique key; product-only
+      // rows use the reviewed partial PostgreSQL index because NULL is distinct
+      // in a normal composite unique index. Concurrent duplicate saves are
+      // intentionally idempotent at the API boundary.
+      if (isUniqueConstraintError(error)) {
+        const existing = await this.findMatchingItem(wishlistId, productId, variantId);
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   async removeItem(userId: string, wishlistItemId: string): Promise<boolean> {
