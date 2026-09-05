@@ -10,7 +10,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
-import { apiErrorMessage, catalogApi, vendorApi } from "../../lib/api";
+import { apiErrorMessage, catalogApi } from "../../lib/api";
 import { hasVendorPermission } from "../vendor/permissions";
 import { useVendorAccess } from "../vendor/use-vendor-access";
 import { VendorStatusPill, VendorWorkspaceShell } from "../vendor/vendor-workspace-shell";
@@ -178,23 +178,21 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
   const [file, setFile] = useState<File | null>(null);
   const [fileAlt, setFileAlt] = useState("");
 
-  const canReadStores = access ? hasVendorPermission(access, "store:read") : false;
   const canRead = access ? hasVendorPermission(access, "product:read") : false;
   const canUpdate = access ? hasVendorPermission(access, "product:update") : false;
   const canArchive = access ? hasVendorPermission(access, "product:archive") : false;
   const labels = useMemo(() => categoryLabels(categories), [categories]);
 
   const load = useCallback(async () => {
-    if (!access || !canRead || !canReadStores) return;
+    if (!access || !canRead) return;
     setState("loading");
     setMessage(null);
     try {
-      const [nextProduct, categoryResponse, storeResponse] = await Promise.all([
+      const [nextProduct, categoryResponse] = await Promise.all([
         catalogApi.getVendorProduct(productId),
         catalogApi.listCategories(),
-        vendorApi.listStores(vendorId),
       ]);
-      if (!storeResponse.items.some((store) => store.id === nextProduct.storeId)) {
+      if (nextProduct.vendorId !== vendorId) {
         throw new Error("This product does not belong to the selected vendor workspace.");
       }
       setProduct(nextProduct);
@@ -209,13 +207,13 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       setMessage(caught instanceof Error ? caught.message : apiErrorMessage(caught, "CartNest could not load this product."));
       setState("error");
     }
-  }, [access, canRead, canReadStores, productId, vendorId]);
+  }, [access, canRead, productId, vendorId]);
 
   useEffect(() => { void load(); }, [load]);
 
   if (accessState === "loading") return <LoadingState label="Loading product workspace…" />;
   if (accessState === "error" || !access) return <ErrorState title="Vendor workspace unavailable" message={accessError ?? "CartNest could not load this vendor."} action={<button className="secondaryButton" type="button" onClick={() => void reloadAccess()}>Try again</button>} />;
-  if (!canRead || !canReadStores) return <ErrorState title="Product access restricted" message="This workspace requires product:read and store:read so the product can be verified against the selected vendor's stores." />;
+  if (!canRead) return <ErrorState title="Product access restricted" message="This workspace requires product:read access." />;
   if (state === "loading") return <LoadingState label="Loading product…" />;
   if (state === "error" || !product) return <ErrorState title="Product unavailable" message={message ?? "CartNest could not load this product."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} />;
 
