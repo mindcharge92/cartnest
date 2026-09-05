@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { AuthGuard } from "../../../components/auth-guard";
+import { ErrorState } from "../../../components/page-state";
+import { useSession } from "../../../components/session-provider";
 import { apiErrorMessage, vendorApi } from "../../../lib/api";
 import { vendorWorkspacePath } from "../../../features/vendor/permissions";
 
@@ -16,11 +19,26 @@ export default function VendorOnboardingPage() {
 
 function VendorOnboarding() {
   const router = useRouter();
+  const { session } = useSession();
   const [displayName, setDisplayName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const hasVerifiedIdentifier = Boolean(session?.user.emailVerified || session?.user.phoneVerified);
+
+  if (!hasVerifiedIdentifier) {
+    return (
+      <main className="pageShell">
+        <ErrorState
+          title="Verify your account before selling"
+          message="CartNest requires at least one verified email address or phone number before a vendor application can be created."
+          action={<Link className="primaryButton" href="/account">Open account verification</Link>}
+        />
+      </main>
+    );
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
