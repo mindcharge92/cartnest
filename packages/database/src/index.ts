@@ -1,12 +1,14 @@
 export { createDatabaseClient, type DatabaseClient, type DatabaseClientOptions } from "./client.js";
 export { isDatabaseReady } from "./health.js";
-export { withTransaction, type DatabaseTransaction } from "./transaction.js";
 export {
   beginIdempotencyRecord,
+  completeIdempotencyRecord,
   enqueueOutboxEvent,
-  writeAuditLog,
-  type AuditLogInput,
+  writeAuditEntry,
+  type AuditEntryInput,
   type BeginIdempotencyInput,
+  type CompleteIdempotencyInput,
   type OutboxEventInput,
-} from "./infrastructure.js";
+} from "./primitives.js";
+export { withTransaction, type DatabaseTransaction } from "./transaction.js";
 export { Prisma } from "./generated/prisma/client.js";
