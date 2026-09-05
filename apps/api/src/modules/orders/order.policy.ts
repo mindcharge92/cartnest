@@ -11,7 +11,6 @@ export interface CheckoutPolicyLine {
 export interface CheckoutStorePolicyInput {
   readonly userId: string;
   readonly cartId: string;
-  readonly cartUpdatedAt: Date;
   readonly vendorId: string;
   readonly storeId: string;
   readonly currency: string;
