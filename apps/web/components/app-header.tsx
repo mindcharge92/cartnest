@@ -7,6 +7,7 @@ import { useSession } from "./session-provider";
 export function AppHeader() {
   const pathname = usePathname();
   const { session, status, logout } = useSession();
+  const marketplaceActive = pathname.startsWith("/marketplace") || pathname.startsWith("/products/");
 
   return (
     <header className="siteHeader">
@@ -17,7 +18,7 @@ export function AppHeader() {
         </Link>
 
         <nav className="primaryNav" aria-label="Primary navigation">
-          <Link className="navLink" aria-current={pathname === "/" ? "page" : undefined} href="/">
+          <Link className="navLink" aria-current={marketplaceActive ? "page" : undefined} href="/marketplace">
             Marketplace
           </Link>
           {status === "authenticated" ? (
