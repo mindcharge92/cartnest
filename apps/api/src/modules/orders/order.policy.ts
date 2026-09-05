@@ -15,6 +15,7 @@ export interface CheckoutStorePolicyInput {
   readonly storeId: string;
   readonly currency: string;
   readonly deliveryAddress: DeliveryAddressSnapshotDto;
+  readonly promotionCode?: string;
   readonly itemSubtotalAmountMinor: bigint;
   readonly lines: readonly CheckoutPolicyLine[];
 }
@@ -25,6 +26,7 @@ export interface CheckoutStoreFinancialQuote {
   readonly taxAmountMinor: bigint;
   readonly commissionRateBps: number;
   readonly commissionAmountMinor: bigint;
+  readonly promotionId?: string;
 }
 
 export interface CheckoutFinancialPolicy {
