@@ -41,22 +41,10 @@ function money(amountMinor: bigint, currency: string) {
   return { amountMinor: amountMinor.toString(), currency };
 }
 
-function attributes(value: unknown): Array<{
-  optionId: string;
-  optionName: string;
-  valueId: string;
-  value: string;
-}> {
+function attributes(value: unknown): Array<{ optionId: string; optionName: string; valueId: string; value: string }> {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is { optionId: string; optionName: string; valueId: string; value: string } =>
-    Boolean(
-      item &&
-        typeof item === "object" &&
-        "optionId" in item && typeof item.optionId === "string" &&
-        "optionName" in item && typeof item.optionName === "string" &&
-        "valueId" in item && typeof item.valueId === "string" &&
-        "value" in item && typeof item.value === "string",
-    ),
+    Boolean(item && typeof item === "object" && "optionId" in item && typeof item.optionId === "string" && "optionName" in item && typeof item.optionName === "string" && "valueId" in item && typeof item.valueId === "string" && "value" in item && typeof item.value === "string"),
   );
 }
 
@@ -65,12 +53,7 @@ function mapVendorOrder(record: VendorOrderRecord | OrderRecord["vendorOrders"][
     id: record.id,
     orderId: record.orderId,
     vendorId: record.vendorId,
-    store: {
-      id: record.store.id,
-      name: record.store.name,
-      slug: record.store.slug,
-      vendorDisplayName: record.store.vendor.displayName,
-    },
+    store: { id: record.store.id, name: record.store.name, slug: record.store.slug, vendorDisplayName: record.store.vendor.displayName },
     status: record.status,
     itemSubtotal: money(record.itemSubtotalAmountMinor, record.currency),
     discount: money(record.discountAmountMinor, record.currency),
@@ -109,7 +92,6 @@ function mapOrder(record: OrderRecord): OrderDto {
   const reservationExpiresAt = held.length
     ? new Date(Math.min(...held.map((reservation) => reservation.expiresAt.getTime()))).toISOString()
     : null;
-  const address = record.deliveryAddressSnapshot as OrderDto["deliveryAddress"];
   return {
     id: record.id,
     orderNumber: record.orderNumber,
@@ -121,7 +103,7 @@ function mapOrder(record: OrderRecord): OrderDto {
     delivery: money(record.deliveryAmountMinor, record.currency),
     tax: money(record.taxAmountMinor, record.currency),
     grandTotal: money(record.grandTotalAmountMinor, record.currency),
-    deliveryAddress: address,
+    deliveryAddress: record.deliveryAddressSnapshot as OrderDto["deliveryAddress"],
     vendorOrders: record.vendorOrders.map(mapVendorOrder),
     paymentIntent: {
       id: paymentIntent.id,
@@ -150,30 +132,15 @@ function summary(record: OrderRecord): OrderSummaryDto {
 }
 
 function fingerprint(body: CheckoutBodyDto): string {
-  const address = body.deliveryAddress;
-  const canonical = JSON.stringify({
-    recipientName: address.recipientName,
-    phone: address.phone,
-    line1: address.line1,
-    line2: address.line2 ?? null,
-    city: address.city,
-    state: address.state,
-    postalCode: address.postalCode ?? null,
-    countryCode: address.countryCode,
-  });
-  return createHash("sha256").update(canonical).digest("hex");
+  const a = body.deliveryAddress;
+  return createHash("sha256").update(JSON.stringify({
+    recipientName: a.recipientName, phone: a.phone, line1: a.line1, line2: a.line2 ?? null,
+    city: a.city, state: a.state, postalCode: a.postalCode ?? null, countryCode: a.countryCode,
+  })).digest("hex");
 }
 
 function assertQuote(quote: CheckoutStoreFinancialQuote, subtotal: bigint): void {
-  if (
-    quote.discountAmountMinor < 0n ||
-    quote.deliveryAmountMinor < 0n ||
-    quote.taxAmountMinor < 0n ||
-    quote.commissionAmountMinor < 0n ||
-    quote.commissionRateBps < 0 ||
-    quote.commissionRateBps > 10000 ||
-    quote.discountAmountMinor > subtotal
-  ) {
+  if (quote.discountAmountMinor < 0n || quote.deliveryAmountMinor < 0n || quote.taxAmountMinor < 0n || quote.commissionAmountMinor < 0n || quote.commissionRateBps < 0 || quote.commissionRateBps > 10000 || quote.discountAmountMinor > subtotal) {
     throw new OrderError("CHECKOUT_POLICY_INVALID", "Checkout financial policy returned an invalid quote.", 500);
   }
 }
@@ -196,46 +163,41 @@ export class OrderService {
     private readonly acceptancePolicy: VendorAcceptancePolicy,
   ) {}
 
-  async checkout(
-    principal: AccessPrincipal,
-    body: CheckoutBodyDto,
-    idempotencyKey: string,
-  ): Promise<{ statusCode: 200 | 201; order: OrderDto }> {
+  async checkout(principal: AccessPrincipal, body: CheckoutBodyDto, idempotencyKey: string): Promise<{ statusCode: 200 | 201; order: OrderDto }> {
     const draft = await this.repository.getCheckoutDraft(principal.userId);
-    if (!draft || draft.lines.length === 0) {
-      throw new OrderError("CART_EMPTY", "The active cart is empty.", 409);
-    }
-    if (draft.lines.some((line) => line.currency !== "NGN")) {
-      throw new OrderError("UNSUPPORTED_CURRENCY", "Checkout currently supports NGN only.", 400);
-    }
+    if (!draft || draft.lines.length === 0) throw new OrderError("CART_EMPTY", "The active cart is empty.", 409);
+    if (draft.lines.some((line) => line.currency !== "NGN")) throw new OrderError("UNSUPPORTED_CURRENCY", "Checkout currently supports NGN only.", 400);
 
     const storeQuotes = [];
     for (const [storeId, lines] of groupDraft(draft)) {
       const first = lines[0]!;
-      const subtotal = lines.reduce(
-        (sum, line) => sum + line.unitPriceAmountMinor * BigInt(line.quantity),
-        0n,
-      );
-      const quote = await this.financialPolicy.quoteStore({
-        vendorId: first.vendorId,
-        storeId,
-        currency: first.currency,
-        itemSubtotalAmountMinor: subtotal,
-        lines: lines.map((line) => ({
-          productId: line.productId,
-          categoryId: line.categoryId,
-          variantId: line.variantId,
-          quantity: line.quantity,
-          unitPriceAmountMinor: line.unitPriceAmountMinor,
-        })),
-      });
+      const subtotal = lines.reduce((sum, line) => sum + line.unitPriceAmountMinor * BigInt(line.quantity), 0n);
+      let quote: CheckoutStoreFinancialQuote;
+      try {
+        quote = await this.financialPolicy.quoteStore({
+          userId: principal.userId,
+          cartId: draft.cartId,
+          vendorId: first.vendorId,
+          storeId,
+          currency: first.currency,
+          deliveryAddress: body.deliveryAddress,
+          itemSubtotalAmountMinor: subtotal,
+          lines: lines.map((line) => ({
+            productId: line.productId,
+            categoryId: line.categoryId,
+            variantId: line.variantId,
+            quantity: line.quantity,
+            unitPriceAmountMinor: line.unitPriceAmountMinor,
+          })),
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "SHIPPING_QUOTE_REQUIRED") {
+          throw new OrderError("SHIPPING_QUOTE_REQUIRED", "Generate a valid shipping quote for every store before checkout.", 409);
+        }
+        throw error;
+      }
       assertQuote(quote, subtotal);
-      storeQuotes.push({
-        storeId,
-        vendorId: first.vendorId,
-        quote,
-        acceptanceMode: await this.acceptancePolicy.modeForStore(storeId),
-      });
+      storeQuotes.push({ storeId, vendorId: first.vendorId, quote, acceptanceMode: await this.acceptancePolicy.modeForStore(storeId) });
     }
 
     const result = await this.repository.createCheckout({
@@ -250,48 +212,17 @@ export class OrderService {
 
     if (result.kind === "created") return { statusCode: 201, order: mapOrder(result.order) };
     if (result.kind === "replayed") return { statusCode: 200, order: mapOrder(result.order) };
-    if (result.kind === "idempotency_conflict") {
-      throw new OrderError(
-        "IDEMPOTENCY_KEY_REUSED",
-        "This idempotency key was already used with a different checkout request.",
-        409,
-      );
-    }
-    if (result.kind === "checkout_in_progress") {
-      throw new OrderError("CHECKOUT_IN_PROGRESS", "This checkout request is already being processed.", 409);
-    }
-    if (result.kind === "stock_conflict") {
-      throw new OrderError(
-        "INSUFFICIENT_STOCK",
-        `Stock changed while checkout was being created for variant ${result.variantId}.`,
-        409,
-      );
-    }
-    throw new OrderError(
-      "CHECKOUT_REVALIDATION_REQUIRED",
-      "The cart changed during checkout. Refresh the cart and try again.",
-      409,
-    );
+    if (result.kind === "idempotency_conflict") throw new OrderError("IDEMPOTENCY_KEY_REUSED", "This idempotency key was already used with a different checkout request.", 409);
+    if (result.kind === "checkout_in_progress") throw new OrderError("CHECKOUT_IN_PROGRESS", "This checkout request is already being processed.", 409);
+    if (result.kind === "stock_conflict") throw new OrderError("INSUFFICIENT_STOCK", `Stock changed while checkout was being created for variant ${result.variantId}.`, 409);
+    throw new OrderError("CHECKOUT_REVALIDATION_REQUIRED", "The cart changed during checkout. Refresh the cart and try again.", 409);
   }
 
   async listOrders(principal: AccessPrincipal, query: OrderListQueryDto): Promise<OrderListResponseDto> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const result = await this.repository.listUserOrders({
-      userId: principal.userId,
-      ...(query.status ? { status: query.status } : {}),
-      page,
-      pageSize,
-    });
-    return {
-      items: result.items.map(summary),
-      pagination: {
-        page,
-        pageSize,
-        totalItems: result.totalItems,
-        totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize),
-      },
-    };
+    const result = await this.repository.listUserOrders({ userId: principal.userId, ...(query.status ? { status: query.status } : {}), page, pageSize });
+    return { items: result.items.map(summary), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize) } };
   }
 
   async getOrder(principal: AccessPrincipal, orderId: string): Promise<OrderDto> {
@@ -300,55 +231,23 @@ export class OrderService {
     return mapOrder(order);
   }
 
-  async cancelOrder(
-    principal: AccessPrincipal,
-    orderId: string,
-    body: CancelOrderBodyDto,
-  ): Promise<OrderDto> {
+  async cancelOrder(principal: AccessPrincipal, orderId: string, body: CancelOrderBodyDto): Promise<OrderDto> {
     try {
-      const order = await this.repository.cancelUserOrder({
-        userId: principal.userId,
-        orderId,
-        ...(body.reason ? { reason: body.reason } : {}),
-        now: new Date(),
-      });
+      const order = await this.repository.cancelUserOrder({ userId: principal.userId, orderId, ...(body.reason ? { reason: body.reason } : {}), now: new Date() });
       if (!order) throw new OrderError("ORDER_NOT_FOUND", "Order was not found.", 404);
       return mapOrder(order);
     } catch (error) {
-      if (error instanceof Error && error.message === "ORDER_NOT_CANCELLABLE") {
-        throw new OrderError(
-          "ORDER_NOT_CANCELLABLE",
-          "Only an unpaid order with a pending payment can be cancelled directly.",
-          409,
-        );
-      }
+      if (error instanceof Error && error.message === "ORDER_NOT_CANCELLABLE") throw new OrderError("ORDER_NOT_CANCELLABLE", "Only an unpaid order with a pending payment can be cancelled directly.", 409);
       throw error;
     }
   }
 
-  async listStoreVendorOrders(
-    principal: AccessPrincipal,
-    storeId: string,
-    query: VendorOrderListQueryDto,
-  ): Promise<VendorOrderListResponseDto> {
+  async listStoreVendorOrders(principal: AccessPrincipal, storeId: string, query: VendorOrderListQueryDto): Promise<VendorOrderListResponseDto> {
     await this.vendorBoundary.requireStorePermission(principal, storeId, "order:read");
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const result = await this.repository.listStoreVendorOrders({
-      storeId,
-      ...(query.status ? { status: query.status } : {}),
-      page,
-      pageSize,
-    });
-    return {
-      items: result.items.map(mapVendorOrder),
-      pagination: {
-        page,
-        pageSize,
-        totalItems: result.totalItems,
-        totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize),
-      },
-    };
+    const result = await this.repository.listStoreVendorOrders({ storeId, ...(query.status ? { status: query.status } : {}), page, pageSize });
+    return { items: result.items.map(mapVendorOrder), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize) } };
   }
 
   async getVendorOrder(principal: AccessPrincipal, vendorOrderId: string): Promise<VendorOrderDto> {
@@ -358,31 +257,16 @@ export class OrderService {
     return mapVendorOrder(order);
   }
 
-  async cancelVendorOrder(
-    principal: AccessPrincipal,
-    vendorOrderId: string,
-    body: CancelOrderBodyDto,
-  ): Promise<VendorOrderDto> {
+  async cancelVendorOrder(principal: AccessPrincipal, vendorOrderId: string, body: CancelOrderBodyDto): Promise<VendorOrderDto> {
     const existing = await this.repository.findVendorOrder(vendorOrderId);
     if (!existing) throw new OrderError("VENDOR_ORDER_NOT_FOUND", "Vendor order was not found.", 404);
     await this.vendorBoundary.requireStorePermission(principal, existing.storeId, "order:process");
     try {
-      const changed = await this.repository.cancelVendorOrder({
-        vendorOrderId,
-        actorUserId: principal.userId,
-        ...(body.reason ? { reason: body.reason } : {}),
-        now: new Date(),
-      });
+      const changed = await this.repository.cancelVendorOrder({ vendorOrderId, actorUserId: principal.userId, ...(body.reason ? { reason: body.reason } : {}), now: new Date() });
       if (!changed) throw new OrderError("VENDOR_ORDER_NOT_FOUND", "Vendor order was not found.", 404);
       return mapVendorOrder(changed);
     } catch (error) {
-      if (error instanceof Error && error.message === "VENDOR_ORDER_NOT_CANCELLABLE") {
-        throw new OrderError(
-          "VENDOR_ORDER_NOT_CANCELLABLE",
-          "This vendor order cannot be cancelled in its current payment/fulfillment state.",
-          409,
-        );
-      }
+      if (error instanceof Error && error.message === "VENDOR_ORDER_NOT_CANCELLABLE") throw new OrderError("VENDOR_ORDER_NOT_CANCELLABLE", "This vendor order cannot be cancelled in its current payment/fulfillment state.", 409);
       throw error;
     }
   }
