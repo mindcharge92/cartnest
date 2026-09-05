@@ -63,6 +63,12 @@ export const CreateShipmentBodySchema = Type.Object({
 }, { additionalProperties: false });
 export type CreateShipmentBodyDto = Static<typeof CreateShipmentBodySchema>;
 
+export const UpdateShipmentStatusBodySchema = Type.Object({
+  status: ShipmentStatusSchema,
+  message: Type.Optional(Type.String({ maxLength: 500 })),
+}, { additionalProperties: false });
+export type UpdateShipmentStatusBodyDto = Static<typeof UpdateShipmentStatusBodySchema>;
+
 export const ShipmentEventSchema = Type.Object({
   id: UuidSchema,
   status: ShipmentStatusSchema,
@@ -85,6 +91,9 @@ export const ShipmentSchema = Type.Object({
   updatedAt: IsoTimestampSchema,
 }, { additionalProperties: false });
 export type ShipmentDto = Static<typeof ShipmentSchema>;
+
+export const ShipmentListResponseSchema = Type.Object({ items: Type.Array(ShipmentSchema) }, { additionalProperties: false });
+export type ShipmentListResponseDto = Static<typeof ShipmentListResponseSchema>;
 
 export const ShipmentIdParamsSchema = Type.Object({ shipmentId: UuidSchema }, { additionalProperties: false });
 export const VendorOrderShipmentParamsSchema = Type.Object({ vendorOrderId: UuidSchema }, { additionalProperties: false });
