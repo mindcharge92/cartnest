@@ -51,12 +51,23 @@ export interface VendorAcceptancePolicy {
 }
 
 /**
- * Approved MVP behavior is automatic acceptance unless an explicit store rule
- * requires manual handling. No manual-processing rule is persisted yet, so P6
- * defaults to AUTO and preserves a replaceable policy boundary.
+ * This is the post-payment MVP default defined by ADR-006. P7 should evaluate
+ * this policy after a payment is verified and then transition eligible vendor
+ * orders from PENDING to ACCEPTED.
  */
 export class DefaultVendorAcceptancePolicy implements VendorAcceptancePolicy {
   async modeForStore(_storeId: string): Promise<VendorAcceptanceMode> {
     return "AUTO";
+  }
+}
+
+/**
+ * Checkout itself must not enter fulfillment before payment succeeds. P6 uses
+ * this gate so every newly created VendorOrder remains PENDING. P7 replaces
+ * this pre-payment gate with post-payment acceptance processing.
+ */
+export class P6PrePaymentVendorAcceptancePolicy implements VendorAcceptancePolicy {
+  async modeForStore(_storeId: string): Promise<VendorAcceptanceMode> {
+    return "MANUAL";
   }
 }
