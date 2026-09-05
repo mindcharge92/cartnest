@@ -1,0 +1,23 @@
+{
+  "name": "@repo/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./api": {"types": "./dist/api.d.ts", "default": "./dist/api.js"},
+    "./web": {"types": "./dist/web.d.ts", "default": "./dist/web.js"},
+    "./worker": {"types": "./dist/worker.d.ts", "default": "./dist/worker.js"},
+    "./shared": {"types": "./dist/shared.d.ts", "default": "./dist/shared.js"}
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}
