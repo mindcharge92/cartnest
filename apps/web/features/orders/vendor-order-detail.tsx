@@ -4,7 +4,7 @@ import type { VendorOrderDto } from "@repo/contracts";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
-import { apiErrorMessage, ordersApi } from "../../lib/api";
+import { apiErrorCode, apiErrorMessage, ordersApi } from "../../lib/api";
 import { formatMoney } from "../catalog/catalog-utils";
 import { hasVendorPermission } from "../vendor/permissions";
 import { useVendorAccess } from "../vendor/use-vendor-access";
@@ -66,7 +66,12 @@ export function VendorOrderDetail({
       setReason("");
       setMessage("This unpaid store order was cancelled. Its held inventory was released and the parent order totals were recalculated.");
     } catch (caught) {
-      setMessage(apiErrorMessage(caught, "CartNest could not cancel this vendor order."));
+      if (apiErrorCode(caught) === "ORDER_PAYMENT_ACTIVE") {
+        setMessage("A buyer payment attempt is active for the parent order. CartNest did not release this store's inventory. Wait for payment reconciliation before cancelling.");
+        try { setOrder(await ordersApi.getVendorOrder(order.id)); } catch { /* Keep the cancellation error. */ }
+      } else {
+        setMessage(apiErrorMessage(caught, "CartNest could not cancel this vendor order."));
+      }
     } finally {
       setBusy(false);
     }
@@ -137,7 +142,7 @@ export function VendorOrderDetail({
                       <textarea rows={3} minLength={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} disabled={busy} />
                     </label>
                     <button className="dangerButton" disabled={busy}>{busy ? "Cancelling…" : "Cancel unpaid store order"}</button>
-                    <p className="fieldHint">Cancellation is exposed only while the parent payment remains pending. The backend performs the authorization and state transition.</p>
+                    <p className="fieldHint">The backend rejects cancellation if a provider attempt becomes active, even when the visible parent payment state has not refreshed yet.</p>
                   </form>
                 ) : null}
 
