@@ -2,13 +2,13 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current backend phase:** P9 — Returns, Refunds, and Reviews. Backend/domain source baselines for P0–P9 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P9 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
+**Current backend phase:** P10 — Admin, Analytics, Promotions, Tax, and Notifications. Backend/domain source baselines for P0–P10 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P10 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
 
-P9 now establishes post-delivery ReturnRequest/ReturnItem workflows, partial/full refund safety, Paystack/Flutterwave refund adapter boundaries, refund reconciliation, explicit returned-stock restocking, verified-purchase product/store reviews, and admin review/refund controls. Provider refund sandbox evidence is still required before production.
+P10 now establishes privileged marketplace administration, platform/store analytics, production fail-closed tax and commission configuration, platform-controlled promotions with transactional redemption limits, line/store/order financial allocation, provider-neutral email/SMS/in-app notification orchestration, notification preferences/read state/retry operations, and a unified admin order/payment/refund/fulfillment case view.
 
 GIGL quoting/tracking have provider-adapter source baselines, while live GIGL shipment booking remains deliberately gated until CartNest's contracted preshipment request/response is verified in the provider sandbox rather than guessed from generic public documentation.
 
-See [`docs/implementation/p9-status.md`](docs/implementation/p9-status.md) for the current phase record.
+See [`docs/implementation/p10-status.md`](docs/implementation/p10-status.md) for the current phase record.
 
 ## Approved Stack
 
@@ -60,16 +60,17 @@ The documentation covers product scope, approved decisions, architecture, ADRs, 
 Implementation records currently exist for:
 
 ```text
-P0 Repository/tooling foundation
-P1 Database + contracts foundation
-P2 Identity/auth/session/authorization
-P3 Vendor/store/KYC/membership
-P4 Catalog/variants/media
-P5 Inventory/wishlist/cart
-P6 Checkout/reservations/multi-vendor orders
-P7 Payments/commission/webhooks/reconciliation
-P8 Logistics/shipping quotes/shipments/tracking
-P9 Returns/refunds/reviews
+P0  Repository/tooling foundation
+P1  Database + contracts foundation
+P2  Identity/auth/session/authorization
+P3  Vendor/store/KYC/membership
+P4  Catalog/variants/media
+P5  Inventory/wishlist/cart
+P6  Checkout/reservations/multi-vendor orders
+P7  Payments/commission/webhooks/reconciliation
+P8  Logistics/shipping quotes/shipments/tracking
+P9  Returns/refunds/reviews
+P10 Admin/analytics/promotions/tax/notifications
 ```
 
 ## Local Setup
