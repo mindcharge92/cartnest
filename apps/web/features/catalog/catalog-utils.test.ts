@@ -1,9 +1,12 @@
+import type { ProductVariantDto } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  bestVariantForOptionValue,
   buildVariantCombinations,
   formatMoney,
   parseNairaToMinor,
   slugifyProduct,
+  variantSelection,
 } from "./catalog-utils";
 
 describe("catalog utilities", () => {
@@ -37,5 +40,43 @@ describe("catalog utilities", () => {
       { name: "B", values: Array.from({ length: 20 }, (_, index) => `B${index}`) },
     ]);
     expect(combinations).toEqual([]);
+  });
+
+  it("moves directly to a valid sparse combination when an option value changes", () => {
+    const redSmall: ProductVariantDto = {
+      id: "11111111-1111-4111-8111-111111111111",
+      sku: "RED-S",
+      price: { amountMinor: "10000", currency: "NGN" },
+      status: "ACTIVE",
+      optionValues: [
+        { optionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", optionName: "Color", valueId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", value: "Red" },
+        { optionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", optionName: "Size", valueId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1", value: "Small" },
+      ],
+      createdAt: "2026-09-05T00:00:00.000Z",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+    };
+    const blueLarge: ProductVariantDto = {
+      ...redSmall,
+      id: "22222222-2222-4222-8222-222222222222",
+      sku: "BLUE-L",
+      optionValues: [
+        { optionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", optionName: "Color", valueId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", value: "Blue" },
+        { optionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", optionName: "Size", valueId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2", value: "Large" },
+      ],
+    };
+
+    const current = variantSelection(redSmall);
+    const compatible = bestVariantForOptionValue(
+      [redSmall, blueLarge],
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      current,
+    );
+
+    expect(compatible?.id).toBe(blueLarge.id);
+    expect(compatible ? variantSelection(compatible) : null).toEqual({
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+    });
   });
 });
