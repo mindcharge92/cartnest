@@ -7,6 +7,7 @@ import { ShipmentProviderSchema, ShipmentStatusSchema } from "./logistics.js";
 
 const NullableTimestampSchema = Type.Union([IsoTimestampSchema, Type.Null()]);
 const NullableStringSchema = Type.Union([Type.String(), Type.Null()]);
+const NullableUuidSchema = Type.Union([UuidSchema, Type.Null()]);
 
 export const AdminOrderOperationsParamsSchema = Type.Object(
   { orderId: UuidSchema },
@@ -82,7 +83,7 @@ export const AdminOrderOperationsDetailSchema = Type.Object(
       Type.Object(
         {
           paymentIntentId: UuidSchema,
-          vendorOrderId: UuidSchema,
+          vendorOrderId: NullableUuidSchema,
           type: Type.String(),
           amount: MoneySchema,
         },
@@ -93,7 +94,7 @@ export const AdminOrderOperationsDetailSchema = Type.Object(
       Type.Object(
         {
           id: UuidSchema,
-          vendorOrderId: Type.Union([UuidSchema, Type.Null()]),
+          vendorOrderId: NullableUuidSchema,
           provider: PaymentProviderSchema,
           providerRefundReference: NullableStringSchema,
           status: RefundStatusSchema,
