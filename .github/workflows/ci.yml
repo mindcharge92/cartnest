@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   quality:
-    name: install-lint-codegen-typecheck-test-build
+    name: install-security-lint-codegen-typecheck-test-build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -32,6 +32,10 @@ jobs:
           node-version: 24.20.0
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Scan repository for committed secrets
+        run: pnpm security:scan
+      - name: Audit dependencies for high/critical advisories
+        run: pnpm security:audit
       - name: Lint and architecture boundaries
         run: pnpm lint
       - name: Validate Prisma schema
