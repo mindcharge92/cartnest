@@ -414,6 +414,13 @@ export class VendorService {
         409,
       );
     }
+    if (target.status === "INVITED" && (input.role !== undefined || input.status !== undefined)) {
+      throw new VendorError(
+        "INVITATION_ACCEPTANCE_REQUIRED",
+        "The invited user must accept the vendor invitation before role or membership status can change.",
+        409,
+      );
+    }
     if (target.role === "OWNER" && actor.role !== "OWNER") {
       throw new VendorError("VENDOR_OWNER_REQUIRED", "Only an owner can change another owner.", 403);
     }
