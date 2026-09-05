@@ -361,14 +361,17 @@ export class PrismaCatalogRepository implements CatalogRepository {
 
   async updateProduct(productId: string, input: UpdateProductBodyDto): Promise<ProductRecord | null> {
     if (!(await this.findProduct(productId))) return null;
-    await this.database.product.update({
-      where: { id: productId },
-      data: {
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.slug !== undefined ? { slug: input.slug } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
-      },
+    await this.database.$transaction(async (transaction) => {
+      await transaction.product.update({
+        where: { id: productId },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.slug !== undefined ? { slug: input.slug } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        },
+      });
+      await this.requeueProductModeration(productId, transaction);
     });
     return this.findProduct(productId);
   }
@@ -499,16 +502,20 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async completeMedia(mediaId: string, input: { width?: number; height?: number }): Promise<MediaRecord | null> {
-    if (!(await this.findMedia(mediaId))) return null;
-    return this.database.media.update({
-      where: { id: mediaId },
-      data: {
-        status: "ACTIVE",
-        ...(input.width !== undefined ? { width: input.width } : {}),
-        ...(input.height !== undefined ? { height: input.height } : {}),
-      },
-      include: { product: { select: { storeId: true } } },
+    const existing = await this.findMedia(mediaId);
+    if (!existing) return null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.media.update({
+        where: { id: mediaId },
+        data: {
+          status: "ACTIVE",
+          ...(input.width !== undefined ? { width: input.width } : {}),
+          ...(input.height !== undefined ? { height: input.height } : {}),
+        },
+      });
+      if (existing.productId) await this.requeueProductModeration(existing.productId, transaction);
     });
+    return this.findMedia(mediaId);
   }
 
   async updateMedia(mediaId: string, input: UpdateMediaBodyDto): Promise<MediaRecord | null> {
@@ -528,12 +535,16 @@ export class PrismaCatalogRepository implements CatalogRepository {
   }
 
   async deleteMedia(mediaId: string, now: Date): Promise<MediaRecord | null> {
-    if (!(await this.findMedia(mediaId))) return null;
-    return this.database.media.update({
-      where: { id: mediaId },
-      data: { status: "DELETED", deletedAt: now },
-      include: { product: { select: { storeId: true } } },
+    const existing = await this.findMedia(mediaId);
+    if (!existing) return null;
+    await this.database.$transaction(async (transaction) => {
+      await transaction.media.update({
+        where: { id: mediaId },
+        data: { status: "DELETED", deletedAt: now },
+      });
+      if (existing.productId) await this.requeueProductModeration(existing.productId, transaction);
     });
+    return this.findMedia(mediaId);
   }
 
   async listPublicCatalog(input: CatalogListInput): Promise<CatalogListResult> {
