@@ -1,0 +1,78 @@
+name: cartnest-staging
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WEB_HOST: ${WEB_HOST}
+      API_HOST: ${API_HOST}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    networks: [edge, private]
+
+  web:
+    image: ${WEB_IMAGE}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    expose: ["3000"]
+    networks: [edge]
+
+  migrate:
+    image: ${API_IMAGE}
+    profiles: ["migration"]
+    env_file: ["${STAGING_ENV_FILE:-/opt/cartnest/env/staging.env}"]
+    environment:
+      NODE_ENV: production
+    command: ["pnpm", "--filter", "@repo/database", "db:migrate:deploy"]
+    networks: [private]
+
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    env_file: ["${STAGING_ENV_FILE:-/opt/cartnest/env/staging.env}"]
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4000
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_EXPOSE_DEVELOPMENT_TOKENS: "false"
+    expose: ["4000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [edge, private]
+
+  worker:
+    image: ${WORKER_IMAGE}
+    restart: unless-stopped
+    env_file: ["${STAGING_ENV_FILE:-/opt/cartnest/env/staging.env}"]
+    environment:
+      NODE_ENV: production
+    networks: [private, egress]
+
+networks:
+  edge:
+  egress:
+  private:
+    internal: true
+
+volumes:
+  caddy_data:
+  caddy_config:
