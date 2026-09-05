@@ -2,6 +2,7 @@ import type {
   AddCartItemBodyDto,
   CartItemDto,
   CartResponseDto,
+  CartUnavailableItemDto,
   CheckoutPreviewIssueDto,
   CheckoutPreviewResponseDto,
   CheckoutPreviewStoreGroupDto,
@@ -64,9 +65,74 @@ export class CartService {
     };
   }
 
+  private unavailableItem(
+    item: CartItemRecord,
+    context: CommerceVariantContext | null,
+    issue: CheckoutPreviewIssueDto,
+  ): CartUnavailableItemDto {
+    return {
+      id: item.id,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      productId: context?.productId ?? null,
+      productName: context?.productName ?? null,
+      storeId: context?.storeId ?? null,
+      sku: context?.sku ?? null,
+      issueCode: issue.code,
+      message: issue.message,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
+  private availabilityIssue(
+    item: CartItemRecord,
+    context: CommerceVariantContext | null,
+  ): CheckoutPreviewIssueDto | null {
+    if (!context) {
+      return { cartItemId: item.id, code: "VARIANT_UNAVAILABLE", message: "The selected variant no longer exists." };
+    }
+    if (context.vendorStatus !== "APPROVED") {
+      return { cartItemId: item.id, code: "VENDOR_UNAVAILABLE", message: "The vendor is not currently available." };
+    }
+    if (context.storeStatus !== "ACTIVE") {
+      return { cartItemId: item.id, code: "STORE_UNAVAILABLE", message: "The store is not currently available." };
+    }
+    if (context.productStatus !== "ACTIVE" || !["NOT_REQUIRED", "APPROVED"].includes(context.moderationStatus)) {
+      return { cartItemId: item.id, code: "PRODUCT_UNAVAILABLE", message: "The product is not currently available." };
+    }
+    if (context.status !== "ACTIVE") {
+      return { cartItemId: item.id, code: "VARIANT_UNAVAILABLE", message: "The selected variant is not currently available." };
+    }
+    return null;
+  }
+
   private async toResponse(cart: CartRecord): Promise<CartResponseDto> {
-    const mapped = await Promise.all(cart.items.map((item) => this.mapAvailableItem(item)));
-    const items = mapped.filter((item): item is CartItemDto => item !== null);
+    const mapped = await Promise.all(
+      cart.items.map(async (source) => {
+        const context = await this.catalogBoundary.findVariantContext(source.variantId);
+        const stateIssue = this.availabilityIssue(source, context);
+        if (stateIssue) {
+          return { unavailable: this.unavailableItem(source, context, stateIssue) } as const;
+        }
+
+        const item = await this.mapAvailableItem(source);
+        if (!item) {
+          const issue: CheckoutPreviewIssueDto = {
+            cartItemId: source.id,
+            code: "VARIANT_UNAVAILABLE",
+            message: "The selected variant is no longer purchasable.",
+          };
+          return { unavailable: this.unavailableItem(source, context, issue) } as const;
+        }
+        return { item } as const;
+      }),
+    );
+
+    const items = mapped.flatMap((entry) => ("item" in entry ? [entry.item] : []));
+    const unavailableItems = mapped.flatMap((entry) =>
+      "unavailable" in entry ? [entry.unavailable] : [],
+    );
     const currency = items[0]?.variant.price.currency ?? "NGN";
     if (items.some((item) => item.variant.price.currency !== currency)) {
       throw new CartError("CART_CURRENCY_MISMATCH", "Cart items must use one currency.", 409);
@@ -75,12 +141,17 @@ export class CartService {
       (total, item) => total + BigInt(item.lineSubtotal.amountMinor),
       0n,
     );
+    const storeIds = new Set<string>();
+    for (const item of items) storeIds.add(item.product.store.id);
+    for (const item of unavailableItems) if (item.storeId) storeIds.add(item.storeId);
+
     return {
       id: cart.id,
       status: cart.status,
       items,
-      itemCount: items.reduce((count, item) => count + item.quantity, 0),
-      distinctStoreCount: new Set(items.map((item) => item.product.store.id)).size,
+      unavailableItems,
+      itemCount: cart.items.reduce((count, item) => count + item.quantity, 0),
+      distinctStoreCount: storeIds.size,
       subtotal: { amountMinor: subtotal.toString(), currency },
       createdAt: cart.createdAt.toISOString(),
       updatedAt: cart.updatedAt.toISOString(),
@@ -134,28 +205,6 @@ export class CartService {
     const removed = await this.repository.removeItem(principal.userId, cartItemId);
     if (!removed) throw new CartError("CART_ITEM_NOT_FOUND", "Cart item was not found.", 404);
     return this.toResponse(await this.repository.getOrCreateActive(principal.userId));
-  }
-
-  private availabilityIssue(
-    item: CartItemRecord,
-    context: CommerceVariantContext | null,
-  ): CheckoutPreviewIssueDto | null {
-    if (!context) {
-      return { cartItemId: item.id, code: "VARIANT_UNAVAILABLE", message: "The selected variant no longer exists." };
-    }
-    if (context.vendorStatus !== "APPROVED") {
-      return { cartItemId: item.id, code: "VENDOR_UNAVAILABLE", message: "The vendor is not currently available." };
-    }
-    if (context.storeStatus !== "ACTIVE") {
-      return { cartItemId: item.id, code: "STORE_UNAVAILABLE", message: "The store is not currently available." };
-    }
-    if (context.productStatus !== "ACTIVE" || !["NOT_REQUIRED", "APPROVED"].includes(context.moderationStatus)) {
-      return { cartItemId: item.id, code: "PRODUCT_UNAVAILABLE", message: "The product is not currently available." };
-    }
-    if (context.status !== "ACTIVE") {
-      return { cartItemId: item.id, code: "VARIANT_UNAVAILABLE", message: "The selected variant is not currently available." };
-    }
-    return null;
   }
 
   async previewCheckout(principal: AccessPrincipal): Promise<CheckoutPreviewResponseDto> {
