@@ -183,6 +183,7 @@ export type PublicMediaDto = Static<typeof PublicMediaSchema>;
 export const VendorProductSchema = Type.Object(
   {
     id: UuidSchema,
+    vendorId: UuidSchema,
     storeId: UuidSchema,
     category: Type.Union([CategorySchema, Type.Null()]),
     name: Type.String({ minLength: 2, maxLength: 200 }),
