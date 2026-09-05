@@ -162,8 +162,12 @@ export function buildApp(
     database && catalogBoundary && inventoryBoundary
       ? new CartService(new PrismaCartRepository(database), catalogBoundary, inventoryBoundary)
       : undefined;
+
+  // P6's financial hook intentionally returns zero commission/tax/delivery while
+  // the transaction shape is being established. Do not expose that baseline to
+  // real production commerce; P7/P8/P10 must supply the configured policies first.
   const orderService =
-    database && vendorBoundary
+    database && vendorBoundary && environment.nodeEnv !== "production"
       ? new OrderService(
           new PrismaOrderRepository(database),
           vendorBoundary,
