@@ -2,13 +2,13 @@
 
 CartNest is a documentation-first multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current backend phase:** P10 — Admin, Analytics, Promotions, Tax, and Notifications. Backend/domain source baselines for P0–P10 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P10 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
+**Current backend phase:** P11 — Hardening, Performance, Security, and NDPR. Backend/domain source baselines for P0–P11 are now implemented. Formal execution evidence is still blocked because GitHub Actions is returning a zero-job `BuildFailed/startup_failure` before the CI workflow starts. Frontend/UI and generated-client integration for P3–P11 are intentionally deferred until the backend phase sequence is complete, after which the project will circle back through the same phases for frontend implementation and integration.
 
-P10 now establishes privileged marketplace administration, platform/store analytics, production fail-closed tax and commission configuration, platform-controlled promotions with transactional redemption limits, line/store/order financial allocation, provider-neutral email/SMS/in-app notification orchestration, notification preferences/read state/retry operations, and a unified admin order/payment/refund/fulfillment case view.
+P11 adds the hardened API composition, restrictive API security headers, generic/redacted unexpected-error handling, secret/dependency CI gates, privacy-data export, administrator-reviewed account anonymisation, NDPR-oriented retention rules, read-path index review, a configurable performance harness, and guarded PostgreSQL backup/restore automation.
 
 GIGL quoting/tracking have provider-adapter source baselines, while live GIGL shipment booking remains deliberately gated until CartNest's contracted preshipment request/response is verified in the provider sandbox rather than guessed from generic public documentation.
 
-See [`docs/implementation/p10-status.md`](docs/implementation/p10-status.md) for the current phase record.
+See [`docs/implementation/p11-status.md`](docs/implementation/p11-status.md) for the current phase record and [`docs/security/data-retention-and-erasure-standard.md`](docs/security/data-retention-and-erasure-standard.md) for the privacy lifecycle baseline.
 
 ## Approved Stack
 
@@ -55,7 +55,7 @@ packages/
 
 Start with [`docs/README.md`](docs/README.md).
 
-The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, logistics, returns/refunds/reviews, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, and the production runbook.
+The documentation covers product scope, approved decisions, architecture, ADRs, API contracts, database/Prisma design, auth/RBAC, money, multi-vendor orders, payments, logistics, returns/refunds/reviews, media, idempotency, implementation phases, provider integrations, observability, deployment, backup/DR, security threat modeling, privacy/erasure, and the production runbook.
 
 Implementation records currently exist for:
 
@@ -71,6 +71,7 @@ P7  Payments/commission/webhooks/reconciliation
 P8  Logistics/shipping quotes/shipments/tracking
 P9  Returns/refunds/reviews
 P10 Admin/analytics/promotions/tax/notifications
+P11 Hardening/performance/security/NDPR
 ```
 
 ## Local Setup
@@ -93,14 +94,24 @@ Local services:
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
 
-## Quality Gates
+## Quality and Hardening Gates
 
 ```bash
+pnpm security:scan
+pnpm security:audit
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 pnpm docs:check
+```
+
+Operational P11 commands also include:
+
+```bash
+pnpm perf:benchmark
+pnpm db:backup
+pnpm db:restore
 ```
 
 `pnpm format` and `pnpm format:check` are also available for repository formatting.
