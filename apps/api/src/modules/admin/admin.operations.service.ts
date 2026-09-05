@@ -36,7 +36,7 @@ export class AdminOperationsService {
           include: {
             refunds: { orderBy: { createdAt: "asc" } },
             shipments: { orderBy: { createdAt: "asc" } },
-            returnRequests: { orderBy: { requestedAt: "asc" } },
+            returns: { orderBy: { requestedAt: "asc" } },
           },
         },
         paymentIntents: {
@@ -137,7 +137,7 @@ export class AdminOperationsService {
         })),
       ),
       returns: order.vendorOrders.flatMap((vendorOrder) =>
-        vendorOrder.returnRequests.map((request) => ({
+        vendorOrder.returns.map((request) => ({
           id: request.id,
           vendorOrderId: vendorOrder.id,
           status: request.status,
