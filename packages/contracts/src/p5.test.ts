@@ -1,4 +1,4 @@
-import { Check } from "typebox/value";
+import Value from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { AdjustInventoryBodySchema } from "./inventory.js";
 import { AddWishlistItemBodySchema } from "./wishlist.js";
@@ -9,14 +9,14 @@ const UUID = "123e4567-e89b-12d3-a456-426614174000";
 describe("P5 contracts", () => {
   it("requires optimistic inventory version and integer delta", () => {
     expect(
-      Check(AdjustInventoryBodySchema, {
+      Value.Check(AdjustInventoryBodySchema, {
         delta: 10,
         reason: "Initial stock",
         expectedVersion: 0,
       }),
     ).toBe(true);
     expect(
-      Check(AdjustInventoryBodySchema, {
+      Value.Check(AdjustInventoryBodySchema, {
         delta: 1.5,
         reason: "Invalid fractional stock",
         expectedVersion: 0,
@@ -25,18 +25,18 @@ describe("P5 contracts", () => {
   });
 
   it("supports product-level or variant-specific wishlist items", () => {
-    expect(Check(AddWishlistItemBodySchema, { productId: UUID })).toBe(true);
-    expect(Check(AddWishlistItemBodySchema, { productId: UUID, variantId: UUID })).toBe(true);
+    expect(Value.Check(AddWishlistItemBodySchema, { productId: UUID })).toBe(true);
+    expect(Value.Check(AddWishlistItemBodySchema, { productId: UUID, variantId: UUID })).toBe(true);
   });
 
   it("rejects non-positive cart quantities", () => {
-    expect(Check(AddCartItemBodySchema, { variantId: UUID, quantity: 2 })).toBe(true);
-    expect(Check(AddCartItemBodySchema, { variantId: UUID, quantity: 0 })).toBe(false);
+    expect(Value.Check(AddCartItemBodySchema, { variantId: UUID, quantity: 2 })).toBe(true);
+    expect(Value.Check(AddCartItemBodySchema, { variantId: UUID, quantity: 0 })).toBe(false);
   });
 
   it("represents a server-calculated checkout preview", () => {
     expect(
-      Check(CheckoutPreviewResponseSchema, {
+      Value.Check(CheckoutPreviewResponseSchema, {
         cartId: UUID,
         ready: true,
         currency: "NGN",
