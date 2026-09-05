@@ -4,9 +4,9 @@ import type { FastifyError, FastifyInstance } from "fastify";
 const NO_STORE_PREFIXES = ["/api/v1/auth", "/api/v1/privacy", "/api/v1/admin"] as const;
 
 /**
- * P11 response hardening. The API is JSON-first and is never intended to be
- * framed or execute browser script, so a restrictive API CSP is safe. The web
- * application will maintain its own CSP during the frontend hardening pass.
+ * P11 response hardening. API JSON responses receive a deliberately restrictive
+ * CSP. Non-production Swagger UI is excluded because it requires browser assets
+ * and inline behavior; Swagger is not registered in production.
  */
 export function registerP11SecurityHardening(
   app: FastifyInstance,
@@ -17,7 +17,9 @@ export function registerP11SecurityHardening(
     reply.header("x-frame-options", "DENY");
     reply.header("referrer-policy", "no-referrer");
     reply.header("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
-    reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    if (!(environment.nodeEnv !== "production" && request.url.startsWith("/documentation"))) {
+      reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    }
     if (environment.nodeEnv === "production") {
       reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
     }
