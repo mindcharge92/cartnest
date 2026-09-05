@@ -31,6 +31,7 @@ function toInventory(context: CommerceVariantContext, inventory: InventoryRecord
     storeId: context.storeId,
     productName: context.productName,
     sku: context.sku,
+    optionValues: context.optionValues.map((selection) => ({ ...selection })),
     onHand: inventory.onHand,
     reserved: inventory.reserved,
     available: Math.max(0, inventory.onHand - inventory.reserved),
