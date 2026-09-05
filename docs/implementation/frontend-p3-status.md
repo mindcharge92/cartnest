@@ -48,6 +48,7 @@ The bridge:
 - accepts the same browser fetch wrapper used by the generated client;
 - therefore preserves `credentials: include` and CSRF-header injection;
 - introduces no Prisma/provider DTOs into `apps/web`;
+- avoids explicit `undefined` fetch-body assignment under the repository's `exactOptionalPropertyTypes` TypeScript baseline;
 - is explicitly an interim typed integration path until `pnpm api:generate` can execute and the generated OpenAPI client is current again.
 
 This closes the identified FP3 blocker without violating ADR-001 or the frontend engineering standard.
@@ -80,9 +81,11 @@ The form collects only fields represented by the P3 contract:
 
 ```text
 displayName
-legalName? 
+legalName?
 registrationNumber?
 ```
+
+The frontend now checks the already-loaded authenticated session and blocks the onboarding form until at least one email/phone identifier is verified, matching the P3 backend `VERIFIED_IDENTIFIER_REQUIRED` invariant. The backend remains authoritative and repeats that validation.
 
 The UI explicitly explains that creating a vendor does not grant selling approval.
 
@@ -200,22 +203,79 @@ The UI supports the complete current P3 permission vocabulary grouped by capabil
 - staff;
 - analytics/verification/provider-account visibility.
 
-Owners are represented as full-access users. Staff permission checkboxes are editable only when the current member has `staff:update`. Removal is shown only with `staff:remove`, and the current user's own removal button is disabled in the UI. Backend final-owner safeguards remain authoritative.
+The frontend now mirrors the backend delegation rules more closely:
 
-## 11. Issues Fixed During FP3
+- a staff inviter cannot select a permission they do not hold;
+- only an OWNER can change membership roles;
+- a staff manager cannot edit/remove an OWNER merely because they hold `staff:update`/`staff:remove`;
+- a member cannot change or remove their own membership from this screen;
+- pending invitations expose permission preparation only, not role/status activation;
+- demoting an OWNER to STAFF does not silently convert the owner's effective full-access DTO into an explicit full staff permission set.
 
-The following previously identified issues were addressed in source:
+Backend final-owner and permission-delegation safeguards remain authoritative.
 
-1. **P3+ generated-client integration blocker** — closed with the contract-derived `@repo/api-client` bridge rather than duplicated DTOs/raw fetch.
+## 11. Invitation Acceptance Boundary Fix
+
+FP3 review exposed a backend state-machine gap: the generic member-update service previously accepted `status: ACTIVE` for an `INVITED` membership, which could bypass the intended self-acceptance endpoint.
+
+That is now closed in `VendorService.updateMember`:
+
+```text
+INVITED membership
+      +
+role/status mutation through generic PATCH
+      ↓
+409 INVITATION_ACCEPTANCE_REQUIRED
+```
+
+Only:
+
+```text
+POST /api/v1/vendors/:vendorId/memberships/accept
+```
+
+may activate the invited user's membership. Permission preparation may still be updated while the invitation is pending. Targeted backend tests were added for activation bypass, role promotion bypass, and allowed permission preparation.
+
+## 12. API Base-URL Consistency Fix
+
+Frontend integration also exposed an environment mismatch. Generated/client route definitions already contain `/api/v1`, while the staging/config examples were appending `/api/v1` to `NEXT_PUBLIC_API_BASE_URL` as well.
+
+That could create requests such as:
+
+```text
+https://api.staging.cartnest.example/api/v1/api/v1/...
+```
+
+The contract is now consistent:
+
+```text
+NEXT_PUBLIC_API_BASE_URL = API origin only
+                         = https://api.staging.cartnest.example
+```
+
+Versioned endpoint paths remain owned by the API client/wrapper.
+
+The shared web config default and both staging examples were updated accordingly.
+
+## 13. Issues Fixed During FP3
+
+The FP3 source pass closes the following identified issues:
+
+1. **P3+ generated-client integration blocker** — contract-derived `@repo/api-client` bridge added instead of duplicated DTOs/raw fetch.
 2. **No vendor workspace navigation** — seller entry point and vendor workspace shell added.
 3. **No vendor onboarding UI** — integrated application flow added.
-4. **No KYC/status UI** — contract-supported verification flow added without inventing document handling.
-5. **No multi-store UI** — store create/list/edit/lifecycle flow added.
-6. **No staff/permission UI** — invitation, membership update, removal, and granular permission editor added.
-7. **Invited/suspended membership treated too loosely in UI authorization** — frontend permission helper explicitly requires ACTIVE membership.
-8. **Potential dead Admin navigation before FP10** — the main header exposes Seller now but intentionally does not expose `/admin` until the admin frontend exists.
+4. **Vendor onboarding allowed an avoidable unverified-identifier failure** — frontend precondition now mirrors the backend invariant.
+5. **No KYC/status UI** — contract-supported verification flow added without inventing document handling.
+6. **No multi-store UI** — store create/list/edit/lifecycle flow added.
+7. **No staff/permission UI** — invitation, membership update, removal, and granular permission editor added.
+8. **Invited/suspended membership treated too loosely in UI authorization** — frontend permission helper explicitly requires ACTIVE membership.
+9. **Staff UI could offer permissions the actor could not delegate** — invite/editor controls now honor the actor's own permission set.
+10. **Staff UI could offer owner/self mutations the API rejects** — role, self-change, owner removal, and status controls now match backend policy.
+11. **Generic member update could activate an invitation without user acceptance** — backend state-machine gap fixed and targeted tests committed.
+12. **Staging API URL could duplicate `/api/v1`** — frontend/config/deployment base-URL convention corrected.
+13. **Potential dead Admin navigation before FP10** — the main header exposes Seller now but intentionally does not expose `/admin` until the admin frontend exists.
 
-## 12. Remaining Non-Code/External Issues
+## 14. Remaining Non-Code/External Issues
 
 ### GitHub Actions startup failure
 
@@ -247,24 +307,32 @@ responsive browser QA
 
 The generated `schema.ts` snapshot is still stale. FP3 is unblocked by the shared-contract bridge, but the preferred long-term state remains a successfully regenerated OpenAPI client once execution is available.
 
-## 13. FP3 Exit-Gate State
+### Secure KYC document capture
+
+The current P3 backend contract has a verification `reference`, not a protected KYC-document upload lifecycle. FP3 intentionally does not fabricate one. If actual identity/business document collection is required for the launch policy, that needs an explicit secure backend/storage contract before the frontend adds file inputs.
+
+## 15. FP3 Exit-Gate State
 
 ```text
 Vendor onboarding UI                     IMPLEMENTED
+Verified-identifier onboarding gate      IMPLEMENTED
 Vendor list/multi-membership UI           IMPLEMENTED
 Vendor workspace                          IMPLEMENTED
 KYC/reference/status UI                   IMPLEMENTED
-Store create/list/edit/lifecycle           IMPLEMENTED
+Store create/list/edit/lifecycle          IMPLEMENTED
 Staff invitation                          IMPLEMENTED
 Granular permission editing               IMPLEMENTED
+Invitation state-machine hardening        IMPLEMENTED
 Contract-derived typed integration        IMPLEMENTED
-Loading/empty/error/success states         IMPLEMENTED
-Responsive/keyboard-oriented source        IMPLEMENTED
+API base-URL consistency                  FIXED
+Loading/empty/error/success states        IMPLEMENTED
+Responsive/keyboard-oriented source       IMPLEMENTED
 Frontend permission logic test            COMMITTED
+Backend invitation policy tests           COMMITTED
 Runtime build/test evidence               NOT EXECUTED
 Browser/API integration evidence          NOT EXECUTED
 ```
 
-## 14. Next Frontend Phase
+## 16. Next Frontend Phase
 
 **FP4 — public marketplace catalog, categories/search/filtering, product detail, vendor products, normalized option/variant builder, Cloudflare R2 media upload, and moderation-aware product state.**
