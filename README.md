@@ -2,9 +2,9 @@
 
 CartNest is a multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP4**.
+**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP5**.
 
-The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, the public catalog, normalized product/variant management, and Cloudflare R2 product-media integration.
+The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, public catalog/product/variant/media integration, authenticated wishlist and multi-store cart flows, checkout-readiness preview, and vendor inventory management with optimistic concurrency handling.
 
 See:
 
@@ -12,8 +12,9 @@ See:
 - [`docs/implementation/frontend-p0-p2-status.md`](docs/implementation/frontend-p0-p2-status.md)
 - [`docs/implementation/frontend-p3-status.md`](docs/implementation/frontend-p3-status.md)
 - [`docs/implementation/frontend-p4-status.md`](docs/implementation/frontend-p4-status.md)
+- [`docs/implementation/frontend-p5-status.md`](docs/implementation/frontend-p5-status.md)
 
-The next frontend phase is **FP5 — inventory, wishlist, and multi-store cart integration**.
+The next frontend phase is **FP6 — checkout, reservations, and buyer/vendor order integration**.
 
 ## Approved Stack
 
@@ -66,8 +67,8 @@ FP1  Typed API integration / shared states                  ✅ source baseline
 FP2  Identity / sessions / verification / MFA               ✅ source baseline
 FP3  Vendor onboarding / stores / KYC / staff               ✅ source baseline
 FP4  Marketplace catalog / products / media                 ✅ source baseline
-FP5  Inventory / wishlist / cart                            NEXT
-FP6  Checkout / orders
+FP5  Inventory / wishlist / cart                            ✅ source baseline
+FP6  Checkout / reservations / orders                       NEXT
 FP7  Payments
 FP8  Logistics / tracking
 FP9  Returns / refunds / reviews
