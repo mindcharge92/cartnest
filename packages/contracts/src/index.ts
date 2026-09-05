@@ -217,7 +217,6 @@ export {
   type UpdateProductBodyDto,
   type UpdateProductVariantBodyDto,
   type VariantIdParamsDto,
-  type VariantOptionSelectionDto,
   type VariantStatusDto,
   type VendorMediaDto,
   type VendorProductDto,
@@ -323,5 +322,7 @@ export {
   type VendorOrderListResponseDto,
   type VendorOrderStatusDto,
 } from "./orders.js";
+
+export * from "./payment.js";
 
 export const CONTRACT_VERSION = 1 as const;
