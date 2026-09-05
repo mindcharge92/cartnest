@@ -11,7 +11,11 @@ const paymentIntentInclude = {
   order: {
     include: {
       user: { select: { id: true, email: true, phone: true } },
-      vendorOrders: { orderBy: { createdAt: "asc" as const } },
+      vendorOrders: {
+        orderBy: { createdAt: "asc" as const },
+        include: { items: { orderBy: { createdAt: "asc" as const } } },
+      },
+      reservations: { orderBy: { createdAt: "asc" as const } },
     },
   },
   attempts: { orderBy: { initializedAt: "asc" as const } },
@@ -23,7 +27,10 @@ const attemptContextInclude = {
     include: {
       order: {
         include: {
-          vendorOrders: { orderBy: { createdAt: "asc" as const } },
+          vendorOrders: {
+            orderBy: { createdAt: "asc" as const },
+            include: { items: { orderBy: { createdAt: "asc" as const } } },
+          },
           reservations: { orderBy: { createdAt: "asc" as const } },
         },
       },
@@ -46,6 +53,8 @@ export type BeginInitializationResult =
   | { readonly kind: "idempotency_conflict" }
   | { readonly kind: "intent_not_found" }
   | { readonly kind: "already_paid" }
+  | { readonly kind: "not_payable" }
+  | { readonly kind: "reservation_expired" }
   | { readonly kind: "active_attempt"; readonly attemptId: string };
 
 export type RecordProviderEventResult =
@@ -137,6 +146,19 @@ function proportionalFee(totalFee: bigint, totals: readonly bigint[]): bigint[] 
   });
 }
 
+function payableVariantIds(
+  vendorOrders: readonly {
+    status: string;
+    items: readonly { variantId: string }[];
+  }[],
+): Set<string> {
+  return new Set(
+    vendorOrders
+      .filter((vendorOrder) => vendorOrder.status !== "CANCELLED")
+      .flatMap((vendorOrder) => vendorOrder.items.map((item) => item.variantId)),
+  );
+}
+
 export class PrismaPaymentRepository implements PaymentRepository {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -180,11 +202,34 @@ export class PrismaPaymentRepository implements PaymentRepository {
         if (intent.status === "SUCCEEDED" || intent.order.paymentStatus === "SUCCEEDED") {
           return { kind: "already_paid" as const };
         }
+        if (
+          !["PENDING_PAYMENT", "PARTIALLY_CANCELLED"].includes(intent.order.status) ||
+          intent.order.paymentStatus !== "PENDING"
+        ) {
+          return { kind: "not_payable" as const };
+        }
 
         const active = intent.attempts.find((attempt) =>
           ["PENDING", "REQUIRES_ACTION", "PROCESSING", "SUCCEEDED"].includes(attempt.status),
         );
         if (active) return { kind: "active_attempt" as const, attemptId: active.id };
+        if (!["PENDING", "FAILED"].includes(intent.status)) {
+          return { kind: "not_payable" as const };
+        }
+
+        const expectedVariants = payableVariantIds(intent.order.vendorOrders);
+        const relevantReservations = intent.order.reservations.filter((reservation) =>
+          expectedVariants.has(reservation.variantId),
+        );
+        if (
+          expectedVariants.size === 0 ||
+          relevantReservations.length !== expectedVariants.size ||
+          relevantReservations.some(
+            (reservation) => reservation.status !== "HELD" || reservation.expiresAt <= input.now,
+          )
+        ) {
+          return { kind: "reservation_expired" as const };
+        }
 
         const idempotency = await transaction.idempotencyRecord.create({
           data: {
@@ -449,8 +494,9 @@ export class PrismaPaymentRepository implements PaymentRepository {
         data: { status: "CANCELLED", failureCategory: "SUPERSEDED_BY_SUCCESS" },
       });
 
+      const payableVendorOrders = order.vendorOrders.filter((vendorOrder) => vendorOrder.status !== "CANCELLED");
       const feeTotal = input.verification.feeAmountMinor ?? 0n;
-      const vendorTotals = order.vendorOrders.map((vendorOrder) => vendorOrder.totalAmountMinor);
+      const vendorTotals = payableVendorOrders.map((vendorOrder) => vendorOrder.totalAmountMinor);
       const fees = proportionalFee(feeTotal, vendorTotals);
       const allocationRows: Array<{
         paymentIntentId: string;
@@ -460,9 +506,9 @@ export class PrismaPaymentRepository implements PaymentRepository {
         currency: string;
       }> = [];
       let allocationTotal = 0n;
-      let allocationsValid = true;
+      let allocationsValid = payableVendorOrders.length > 0;
 
-      for (const [index, vendorOrder] of order.vendorOrders.entries()) {
+      for (const [index, vendorOrder] of payableVendorOrders.entries()) {
         const gatewayFee = fees[index] ?? 0n;
         const vendorNet =
           vendorOrder.itemSubtotalAmountMinor -
@@ -502,29 +548,38 @@ export class PrismaPaymentRepository implements PaymentRepository {
         variantId: string;
         quantity: number;
         status: string;
+        expiresAt: Date;
         onHand: number;
         reserved: number;
       };
       const lockedReservations = await transaction.$queryRaw<LockedReservation[]>(Prisma.sql`
-        SELECT r."id", r."variantId", r."quantity", r."status", i."onHand", i."reserved"
+        SELECT r."id", r."variantId", r."quantity", r."status", r."expiresAt", i."onHand", i."reserved"
         FROM "InventoryReservation" r
         JOIN "InventoryItem" i ON i."variantId" = r."variantId"
         WHERE r."orderId" = ${order.id}::uuid
         ORDER BY r."variantId"
         FOR UPDATE OF r, i
       `);
+      const expectedVariants = payableVariantIds(payableVendorOrders);
+      const relevantReservations = lockedReservations.filter((reservation) =>
+        expectedVariants.has(reservation.variantId),
+      );
       const fulfillmentCommitted =
-        order.status !== "CANCELLED" &&
-        lockedReservations.length > 0 &&
-        lockedReservations.every(
+        allocationsValid &&
+        ["PENDING_PAYMENT", "PARTIALLY_CANCELLED"].includes(order.status) &&
+        order.paymentStatus === "PENDING" &&
+        expectedVariants.size > 0 &&
+        relevantReservations.length === expectedVariants.size &&
+        relevantReservations.every(
           (reservation) =>
             reservation.status === "HELD" &&
+            reservation.expiresAt > input.now &&
             reservation.onHand >= reservation.quantity &&
             reservation.reserved >= reservation.quantity,
         );
 
       if (fulfillmentCommitted) {
-        for (const reservation of lockedReservations) {
+        for (const reservation of relevantReservations) {
           await transaction.inventoryItem.update({
             where: { variantId: reservation.variantId },
             data: {
@@ -574,7 +629,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
           payload: {
             orderId: order.id,
             paymentIntentId: intent.id,
-            reason: !fulfillmentCommitted ? "INVENTORY_RESERVATION_UNAVAILABLE" : "ALLOCATION_MISMATCH",
+            reason: !allocationsValid ? "ALLOCATION_MISMATCH" : "INVENTORY_RESERVATION_UNAVAILABLE",
           },
         });
       }
