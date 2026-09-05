@@ -13,10 +13,22 @@ export const WishlistItemSchema = Type.Object(
 );
 export type WishlistItemDto = Static<typeof WishlistItemSchema>;
 
+export const WishlistUnavailableItemSchema = Type.Object(
+  {
+    id: UuidSchema,
+    productId: UuidSchema,
+    variantId: Type.Union([UuidSchema, Type.Null()]),
+    createdAt: IsoTimestampSchema,
+  },
+  { additionalProperties: false },
+);
+export type WishlistUnavailableItemDto = Static<typeof WishlistUnavailableItemSchema>;
+
 export const WishlistResponseSchema = Type.Object(
   {
     id: UuidSchema,
     items: Type.Array(WishlistItemSchema),
+    unavailableItems: Type.Array(WishlistUnavailableItemSchema),
     updatedAt: IsoTimestampSchema,
   },
   { additionalProperties: false },
