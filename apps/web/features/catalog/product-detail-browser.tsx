@@ -4,7 +4,8 @@ import type { CatalogProductDetailResponseDto } from "@repo/contracts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
-import { apiErrorMessage, catalogApi } from "../../lib/api";
+import { useSession } from "../../components/session-provider";
+import { apiErrorMessage, cartApi, catalogApi, wishlistApi } from "../../lib/api";
 import {
   bestVariantForOptionValue,
   formatMoney,
@@ -18,11 +19,15 @@ function initialSelection(product: CatalogProductDetailResponseDto): Record<stri
 }
 
 export function ProductDetailBrowser({ productId }: Readonly<{ productId: string }>) {
+  const { session, status: sessionStatus } = useSession();
   const [product, setProduct] = useState<CatalogProductDetailResponseDto | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [activeImage, setActiveImage] = useState(0);
+  const [quantity, setQuantity] = useState("1");
+  const [commerceBusy, setCommerceBusy] = useState<"cart" | "wishlist" | null>(null);
+  const [commerceMessage, setCommerceMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -32,6 +37,8 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
       setProduct(next);
       setSelected(initialSelection(next));
       setActiveImage(0);
+      setQuantity("1");
+      setCommerceMessage(null);
       setState("ready");
     } catch (caught) {
       setError(apiErrorMessage(caught, "CartNest could not load this product."));
@@ -48,12 +55,46 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
     return product.variants.find((variant) => variantMatchesSelection(variant, selected)) ?? null;
   }, [product, selected]);
 
+  async function addToCart() {
+    if (!selectedVariant || !session) return;
+    const parsedQuantity = Number(quantity);
+    if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 1000) {
+      setCommerceMessage("Quantity must be a whole number between 1 and 1000.");
+      return;
+    }
+    setCommerceBusy("cart");
+    setCommerceMessage(null);
+    try {
+      await cartApi.addItem({ variantId: selectedVariant.id, quantity: parsedQuantity });
+      setCommerceMessage(`${parsedQuantity} × ${product?.name ?? "product"} added to your cart.`);
+    } catch (caught) {
+      setCommerceMessage(apiErrorMessage(caught, "CartNest could not add this variant to your cart."));
+    } finally {
+      setCommerceBusy(null);
+    }
+  }
+
+  async function saveToWishlist() {
+    if (!selectedVariant || !session || !product) return;
+    setCommerceBusy("wishlist");
+    setCommerceMessage(null);
+    try {
+      await wishlistApi.addItem({ productId: product.id, variantId: selectedVariant.id });
+      setCommerceMessage("This variant is saved to your wishlist.");
+    } catch (caught) {
+      setCommerceMessage(apiErrorMessage(caught, "CartNest could not save this variant."));
+    } finally {
+      setCommerceBusy(null);
+    }
+  }
+
   if (state === "loading") return <main className="pageShell"><LoadingState label="Loading product…" /></main>;
   if (state === "error" || !product) {
     return <main className="pageShell"><ErrorState title="Product unavailable" message={error ?? "This product could not be loaded."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} /></main>;
   }
 
   const image = product.media[activeImage] ?? product.media[0];
+  const returnTo = `/products/${encodeURIComponent(productId)}`;
 
   return (
     <main className="productDetailPage">
@@ -118,7 +159,10 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
                           disabled={!compatibleVariant}
                           aria-pressed={active}
                           onClick={() => {
-                            if (compatibleVariant) setSelected(variantSelection(compatibleVariant));
+                            if (compatibleVariant) {
+                              setSelected(variantSelection(compatibleVariant));
+                              setCommerceMessage(null);
+                            }
                           }}
                         >
                           {value.value}
@@ -140,9 +184,29 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
             <p className="formMessage formMessageError" role="status">This option combination is not currently available. Choose another value.</p>
           )}
 
+          <div className="productCommerceActions">
+            {sessionStatus === "authenticated" && session ? (
+              <>
+                <div className="productCommerceControls">
+                  <label className="field productQuantity">Quantity<input type="number" min={1} max={1000} inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} disabled={!selectedVariant || commerceBusy !== null} /></label>
+                  <button className="primaryButton" type="button" disabled={!selectedVariant || commerceBusy !== null} onClick={() => void addToCart()}>{commerceBusy === "cart" ? "Adding…" : "Add to cart"}</button>
+                  <button className="secondaryButton" type="button" disabled={!selectedVariant || commerceBusy !== null} onClick={() => void saveToWishlist()}>{commerceBusy === "wishlist" ? "Saving…" : "Save variant"}</button>
+                </div>
+                {commerceMessage ? <p className="formMessage" role="status">{commerceMessage}</p> : null}
+              </>
+            ) : sessionStatus === "loading" ? (
+              <p className="formMessage">Checking your account before enabling cart and wishlist actions…</p>
+            ) : (
+              <div className="actionRow">
+                <Link className="primaryButton" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in to add to cart</Link>
+                <Link className="secondaryButton" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in to save</Link>
+              </div>
+            )}
+          </div>
+
           <div className="productPhaseNotice">
             <strong>Secure marketplace listing</strong>
-            <span>CartNest only exposes products from active stores, approved vendors, accepted moderation states and active variants.</span>
+            <span>CartNest only exposes products from active stores, approved vendors, accepted moderation states and active variants. Cart pricing and stock are revalidated by the backend.</span>
           </div>
         </div>
       </section>
