@@ -5,6 +5,7 @@ export const ALL_VENDOR_PERMISSIONS: readonly VendorPermissionDto[] = [
   "store:read",
   "store:update",
   "product:create",
+  "product:read",
   "product:update",
   "product:archive",
   "inventory:read",
