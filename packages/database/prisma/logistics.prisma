@@ -1,0 +1,57 @@
+model StoreFulfillmentProfile {
+  id                           String           @id @default(uuid()) @db.Uuid
+  storeId                      String           @unique @db.Uuid
+  defaultProvider              ShipmentProvider @default(MANUAL)
+  manualDeliveryEnabled        Boolean          @default(true)
+  manualDeliveryFeeAmountMinor BigInt?
+  currency                     String           @default("NGN") @db.Char(3)
+  originAddress                Json
+  giglStationId                Int?
+  active                       Boolean          @default(true)
+  createdAt                    DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt                    DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([active, defaultProvider])
+}
+
+model VariantShippingProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  variantId   String   @unique @db.Uuid
+  weightGrams Int
+  lengthMm    Int?
+  widthMm     Int?
+  heightMm    Int?
+  pieces      Int      @default(1)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model ShippingQuote {
+  id                     String           @id @default(uuid()) @db.Uuid
+  userId                 String           @db.Uuid
+  cartId                 String           @db.Uuid
+  storeId                String           @db.Uuid
+  provider               ShipmentProvider
+  amountMinor            BigInt
+  currency               String           @default("NGN") @db.Char(3)
+  serviceCode            String?
+  providerQuoteReference String?
+  requestFingerprint     String
+  expiresAt              DateTime         @db.Timestamptz(3)
+  metadata               Json?
+  createdAt              DateTime         @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, cartId, storeId, expiresAt])
+  @@index([provider, expiresAt])
+}
+
+model ShipmentItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  shipmentId  String   @db.Uuid
+  orderItemId String   @db.Uuid
+  quantity    Int
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([shipmentId, orderItemId])
+  @@index([orderItemId])
+}
