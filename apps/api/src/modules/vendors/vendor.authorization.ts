@@ -23,11 +23,28 @@ export const ALL_VENDOR_PERMISSIONS: readonly VendorPermissionDto[] = [
   "provider-account:read",
 ] as const;
 
-const PRODUCT_PERMISSIONS_THAT_IMPLY_READ: readonly VendorPermissionDto[] = [
-  "product:create",
-  "product:update",
-  "product:archive",
-];
+const READ_PERMISSION_IMPLICATIONS: Readonly<
+  Partial<Record<VendorPermissionDto, readonly VendorPermissionDto[]>>
+> = {
+  "store:read": [
+    "store:update",
+    "product:create",
+    "product:read",
+    "product:update",
+    "product:archive",
+    "inventory:read",
+    "inventory:adjust",
+    "order:read",
+    "order:process",
+    "order:fulfill",
+    "refund:request",
+    "analytics:read",
+  ],
+  "product:read": ["product:create", "product:update", "product:archive"],
+  "inventory:read": ["inventory:adjust"],
+  "order:read": ["order:process", "order:fulfill", "refund:request"],
+  "staff:read": ["staff:invite", "staff:update", "staff:remove"],
+};
 
 export interface VendorMembershipContext {
   readonly id: string;
@@ -71,12 +88,32 @@ export function requireVendorOwner(membership: VendorMembershipContext): void {
   }
 }
 
-function staffHasPermission(membership: VendorMembershipContext, permission: VendorPermissionDto): boolean {
-  if (membership.permissions.includes(permission)) return true;
-  if (permission === "product:read") {
-    return PRODUCT_PERMISSIONS_THAT_IMPLY_READ.some((candidate) => membership.permissions.includes(candidate));
+function expandStaffPermissions(permissions: readonly string[]): VendorPermissionDto[] {
+  const expanded = new Set(
+    permissions.filter((permission): permission is VendorPermissionDto =>
+      ALL_VENDOR_PERMISSIONS.includes(permission as VendorPermissionDto),
+    ),
+  );
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [readPermission, capabilities] of Object.entries(READ_PERMISSION_IMPLICATIONS) as Array<
+      [VendorPermissionDto, readonly VendorPermissionDto[]]
+    >) {
+      if (expanded.has(readPermission)) continue;
+      if (capabilities.some((permission) => expanded.has(permission))) {
+        expanded.add(readPermission);
+        changed = true;
+      }
+    }
   }
-  return false;
+
+  return ALL_VENDOR_PERMISSIONS.filter((permission) => expanded.has(permission));
+}
+
+function staffHasPermission(membership: VendorMembershipContext, permission: VendorPermissionDto): boolean {
+  return expandStaffPermissions(membership.permissions).includes(permission);
 }
 
 export function requireVendorPermission(
@@ -99,14 +136,5 @@ export function effectiveVendorPermissions(
   if (membership.role === "OWNER" && membership.status === "ACTIVE") {
     return ALL_VENDOR_PERMISSIONS;
   }
-  const explicit = membership.permissions.filter((permission): permission is VendorPermissionDto =>
-    ALL_VENDOR_PERMISSIONS.includes(permission as VendorPermissionDto),
-  );
-  if (
-    !explicit.includes("product:read") &&
-    PRODUCT_PERMISSIONS_THAT_IMPLY_READ.some((permission) => explicit.includes(permission))
-  ) {
-    return [...explicit, "product:read"];
-  }
-  return explicit;
+  return expandStaffPermissions(membership.permissions);
 }
