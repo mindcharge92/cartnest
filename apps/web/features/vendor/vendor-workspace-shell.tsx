@@ -34,6 +34,7 @@ export function VendorWorkspaceShell({
     { label: "Overview", href: root },
     { label: "Stores", href: `${root}/stores`, permission: "store:read" },
     { label: "Products", href: `${root}/products`, permissions: ["store:read", "product:read"] },
+    { label: "Inventory", href: `${root}/inventory`, permission: "inventory:read" },
     { label: "Verification", href: `${root}/kyc`, ownerOrPermission: "verification:manage" },
     { label: "Staff & permissions", href: `${root}/staff`, permission: "staff:read" },
   ];
