@@ -22,24 +22,9 @@ export interface ProviderInitializeInput {
 }
 
 export type ProviderInitializeResult =
-  | {
-      readonly kind: "initialized";
-      readonly providerReference: string;
-      readonly providerTransactionId?: string;
-      readonly authorizationUrl: string;
-      readonly accessCode?: string;
-      readonly channel?: string;
-    }
-  | {
-      readonly kind: "definite_failure";
-      readonly code: string;
-      readonly message: string;
-    }
-  | {
-      readonly kind: "ambiguous";
-      readonly code: string;
-      readonly message: string;
-    };
+  | { readonly kind: "initialized"; readonly providerReference: string; readonly providerTransactionId?: string; readonly authorizationUrl: string; readonly accessCode?: string; readonly channel?: string }
+  | { readonly kind: "definite_failure"; readonly code: string; readonly message: string }
+  | { readonly kind: "ambiguous"; readonly code: string; readonly message: string };
 
 export type ProviderVerificationStatus = "SUCCEEDED" | "FAILED" | "PROCESSING" | "UNKNOWN";
 
@@ -51,6 +36,27 @@ export interface ProviderVerificationResult {
   readonly currency?: string;
   readonly feeAmountMinor?: bigint;
   readonly channel?: string;
+  readonly rawStatus?: string;
+}
+
+export interface ProviderRefundInput {
+  readonly providerTransactionId: string;
+  readonly amountMinor: bigint;
+  readonly currency: string;
+  readonly reason: string;
+  readonly callbackUrl?: string;
+}
+
+export type ProviderRefundResult =
+  | { readonly kind: "submitted"; readonly providerRefundReference: string; readonly status: "PROCESSING" | "SUCCEEDED"; readonly rawStatus?: string }
+  | { readonly kind: "definite_failure"; readonly code: string; readonly message: string }
+  | { readonly kind: "ambiguous"; readonly code: string; readonly message: string };
+
+export interface ProviderRefundVerificationResult {
+  readonly providerRefundReference: string;
+  readonly status: "PROCESSING" | "SUCCEEDED" | "FAILED" | "UNKNOWN";
+  readonly amountMinor?: bigint;
+  readonly currency?: string;
   readonly rawStatus?: string;
 }
 
@@ -66,6 +72,8 @@ export interface PaymentProviderAdapter {
   readonly provider: PaymentProviderDto;
   initialize(input: ProviderInitializeInput): Promise<ProviderInitializeResult>;
   verify(providerReference: string): Promise<ProviderVerificationResult>;
+  refund(input: ProviderRefundInput): Promise<ProviderRefundResult>;
+  verifyRefund(providerRefundReference: string): Promise<ProviderRefundVerificationResult>;
   verifyWebhook(rawBody: Buffer, signature: string | undefined): boolean;
   normalizeWebhook(rawBody: Buffer): NormalizedWebhookEvent;
 }
