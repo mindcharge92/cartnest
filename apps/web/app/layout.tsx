@@ -4,6 +4,7 @@ import { AppHeader } from "../components/app-header";
 import { SessionProvider } from "../components/session-provider";
 import "./globals.css";
 import "./vendor.css";
+import "./catalog.css";
 
 export const metadata: Metadata = {
   title: {
