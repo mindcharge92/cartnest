@@ -105,3 +105,44 @@ describe("P9 returns/refunds/reviews contract surface", () => {
     expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
   });
 });
+
+describe("P10 admin, analytics, promotion, tax, and notification contract surface", () => {
+  it("registers P10 routes in OpenAPI", async () => {
+    const app = buildApp({ logger: false }, readyProbes);
+    apps.push(app);
+    await app.ready();
+    const specification = app.swagger();
+    expect(specification.paths).toHaveProperty("/api/v1/admin/analytics");
+    expect(specification.paths).toHaveProperty("/api/v1/stores/{storeId}/analytics");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/users");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/orders");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/payment-intents");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/refunds");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/tax-rates");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/promotions");
+    expect(specification.paths).toHaveProperty("/api/v1/notifications");
+    expect(specification.paths).toHaveProperty("/api/v1/notification-preferences");
+    expect(specification.paths).toHaveProperty("/api/v1/admin/notifications");
+  });
+
+  it("rejects malformed promotion payloads at the shared contract boundary", async () => {
+    const app = buildApp({ logger: false }, readyProbes);
+    apps.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/promotions",
+      headers: { "content-type": "application/json" },
+      payload: { code: "bad code", name: "Bad", type: "PERCENTAGE", value: "0" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+  });
+
+  it("exposes the standard unavailable envelope when notification persistence is absent", async () => {
+    const app = buildApp({ logger: false }, readyProbes);
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/v1/notifications" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ error: { code: "NOTIFICATION_SERVICE_UNAVAILABLE" } });
+  });
+});
