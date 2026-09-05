@@ -6,7 +6,7 @@ import { useSession } from "./session-provider";
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { session, status, logout } = useSession();
+  const { session, status, logout, reloadSession } = useSession();
   const marketplaceActive = pathname.startsWith("/marketplace") || pathname.startsWith("/products/");
 
   return (
@@ -48,7 +48,9 @@ export function AppHeader() {
           ) : status === "loading" ? (
             <span className="navStatus" aria-live="polite">Checking session…</span>
           ) : (
-            <Link className="navLink" href="/login">Sign in</Link>
+            <button className="navButton navLinkAlert" type="button" onClick={() => void reloadSession()}>
+              Retry session
+            </button>
           )}
         </nav>
       </div>
