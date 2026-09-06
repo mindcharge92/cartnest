@@ -82,13 +82,18 @@ function pagination(page: number, pageSize: number, totalItems: number) {
   };
 }
 
+function prismaCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
 function isTransactionConflict(error: unknown): boolean {
-  return Boolean(
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "P2034",
-  );
+  return prismaCode(error) === "P2034";
+}
+
+function isUniqueConstraintConflict(error: unknown): boolean {
+  return prismaCode(error) === "P2002";
 }
 
 export class PrivacyService {
@@ -226,35 +231,50 @@ export class PrivacyService {
   }
 
   async requestErasure(principal: AccessPrincipal): Promise<PrivacyRequestDto> {
+    const activeWhere = {
+      userId: principal.userId,
+      status: { in: ["PENDING", "REQUIRES_REVIEW"] as const },
+    };
     const existing = await this.database.privacyRequest.findFirst({
-      where: {
-        userId: principal.userId,
-        status: { in: ["PENDING", "REQUIRES_REVIEW"] },
-      },
+      where: activeWhere,
       orderBy: { requestedAt: "desc" },
     });
     if (existing) return mapRequest(existing);
 
     const blockers = await this.erasureBlockers(principal.userId);
-    const request = await this.database.$transaction(async (tx) => {
-      const created = await tx.privacyRequest.create({
-        data: {
-          userId: principal.userId,
-          status: blockers.length > 0 ? "REQUIRES_REVIEW" : "PENDING",
-          reviewNote: blockers.length > 0 ? `Automatic erasure blocked: ${blockers.join(", ")}` : null,
-        },
+    try {
+      const request = await this.database.$transaction(async (tx) => {
+        const created = await tx.privacyRequest.create({
+          data: {
+            userId: principal.userId,
+            status: blockers.length > 0 ? "REQUIRES_REVIEW" : "PENDING",
+            reviewNote: blockers.length > 0 ? `Automatic erasure blocked: ${blockers.join(", ")}` : null,
+          },
+        });
+        await writeAuditEntry(tx, {
+          actorType: "USER",
+          actorUserId: principal.userId,
+          action: "privacy.erasure.requested",
+          entityType: "PrivacyRequest",
+          entityId: created.id,
+          metadata: { blockers },
+        });
+        return created;
       });
-      await writeAuditEntry(tx, {
-        actorType: "USER",
-        actorUserId: principal.userId,
-        action: "privacy.erasure.requested",
-        entityType: "PrivacyRequest",
-        entityId: created.id,
-        metadata: { blockers },
+      return mapRequest(request);
+    } catch (error) {
+      if (!isUniqueConstraintConflict(error)) throw error;
+      const concurrent = await this.database.privacyRequest.findFirst({
+        where: activeWhere,
+        orderBy: { requestedAt: "desc" },
       });
-      return created;
-    });
-    return mapRequest(request);
+      if (concurrent) return mapRequest(concurrent);
+      throw new PrivacyError(
+        "PRIVACY_REQUEST_STATE_CONFLICT",
+        "A concurrent privacy request changed account state. Refresh and try again.",
+        409,
+      );
+    }
   }
 
   async listMyRequests(
