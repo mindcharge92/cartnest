@@ -1,4 +1,6 @@
 import type {
+  AdminPrivacyRequestDto,
+  AdminPrivacyRequestListResponseDto,
   PrivacyExportDto,
   PrivacyRequestDto,
   PrivacyRequestListQueryDto,
@@ -33,6 +35,24 @@ function mapRequest(record: {
 }): PrivacyRequestDto {
   return {
     id: record.id,
+    status: record.status,
+    reviewNote: record.reviewNote,
+    requestedAt: record.requestedAt.toISOString(),
+    processedAt: record.processedAt?.toISOString() ?? null,
+  };
+}
+
+function mapAdminRequest(record: {
+  id: string;
+  userId: string;
+  status: "PENDING" | "REQUIRES_REVIEW" | "COMPLETED" | "REJECTED";
+  reviewNote: string | null;
+  requestedAt: Date;
+  processedAt: Date | null;
+}): AdminPrivacyRequestDto {
+  return {
+    id: record.id,
+    subjectUserId: record.userId,
     status: record.status,
     reviewNote: record.reviewNote,
     requestedAt: record.requestedAt.toISOString(),
@@ -248,7 +268,7 @@ export class PrivacyService {
   async listAdminRequests(
     principal: AccessPrincipal,
     query: PrivacyRequestListQueryDto,
-  ): Promise<PrivacyRequestListResponseDto> {
+  ): Promise<AdminPrivacyRequestListResponseDto> {
     this.requireAdmin(principal);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -263,7 +283,7 @@ export class PrivacyService {
       this.database.privacyRequest.count({ where }),
     ]);
     return {
-      items: items.map(mapRequest),
+      items: items.map(mapAdminRequest),
       pagination: pagination(page, pageSize, totalItems),
     };
   }
@@ -282,8 +302,8 @@ export class PrivacyService {
 
     if (body.decision === "REJECT") {
       const rejected = await this.database.$transaction(async (tx) => {
-        const updated = await tx.privacyRequest.update({
-          where: { id: request.id },
+        const changed = await tx.privacyRequest.updateMany({
+          where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
           data: {
             status: "REJECTED",
             reviewNote: body.reason,
@@ -291,6 +311,15 @@ export class PrivacyService {
             processedBy: principal.userId,
           },
         });
+        if (changed.count !== 1) {
+          throw new PrivacyError(
+            "PRIVACY_REQUEST_STATE_CONFLICT",
+            "Privacy request state changed before this decision could be recorded. Refresh and try again.",
+            409,
+          );
+        }
+        const updated = await tx.privacyRequest.findUnique({ where: { id: request.id } });
+        if (!updated) throw new PrivacyError("PRIVACY_REQUEST_NOT_FOUND", "Privacy request was not found.", 404);
         await writeAuditEntry(tx, {
           actorType: "USER",
           actorUserId: principal.userId,
@@ -306,8 +335,8 @@ export class PrivacyService {
 
     const blockers = await this.erasureBlockers(request.userId);
     if (blockers.length > 0) {
-      await this.database.privacyRequest.update({
-        where: { id: request.id },
+      await this.database.privacyRequest.updateMany({
+        where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
         data: {
           status: "REQUIRES_REVIEW",
           reviewNote: `Cannot anonymize yet: ${blockers.join(", ")}. ${body.reason}`,
@@ -328,6 +357,17 @@ export class PrivacyService {
     const now = new Date();
 
     const completed = await this.database.$transaction(async (tx) => {
+      const claimed = await tx.privacyRequest.updateMany({
+        where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
+        data: { reviewNote: `Anonymization approved and processing. ${body.reason}` },
+      });
+      if (claimed.count !== 1) {
+        throw new PrivacyError(
+          "PRIVACY_REQUEST_STATE_CONFLICT",
+          "Privacy request state changed before anonymization could begin. Refresh and try again.",
+          409,
+        );
+      }
       await tx.authIdentity.deleteMany({ where: { userId: request.userId } });
       await tx.authSession.deleteMany({ where: { userId: request.userId } });
       await tx.mfaFactor.deleteMany({ where: { userId: request.userId } });
