@@ -38,12 +38,10 @@ export function VariantShippingProfileEditor({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage(null);
-    setSaved(false);
     try {
       const profile = await logisticsApi.getVariantShippingProfile(variantId);
       setForm({
@@ -77,12 +75,10 @@ export function VariantShippingProfileEditor({
 
     if (!weightGrams || !pieces) {
       setMessage("Weight and pieces must be positive whole numbers.");
-      setSaved(false);
       return;
     }
     if ((form.lengthMm && !lengthMm) || (form.widthMm && !widthMm) || (form.heightMm && !heightMm)) {
       setMessage("Dimensions must be positive whole millimetres when provided.");
-      setSaved(false);
       return;
     }
 
@@ -96,7 +92,6 @@ export function VariantShippingProfileEditor({
 
     setBusy(true);
     setMessage(null);
-    setSaved(false);
     try {
       const profile = await logisticsApi.updateVariantShippingProfile(variantId, body);
       setForm({
@@ -107,7 +102,6 @@ export function VariantShippingProfileEditor({
         pieces: String(profile.pieces),
       });
       setMessage("Shipping saved.");
-      setSaved(true);
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "Could not save shipping details."));
     } finally {
@@ -127,7 +121,7 @@ export function VariantShippingProfileEditor({
         <label className="field">Pieces<input type="number" min={1} max={1000} value={form.pieces} disabled={!canUpdate || busy} onChange={(event) => setForm((current) => ({ ...current, pieces: event.target.value }))} /></label>
       </div>
       {canUpdate ? <button className="secondaryButton compactButton" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save shipping"}</button> : null}
-      {message ? <small className={saved ? "tableMessage" : "tableMessage"} role="status">{message}</small> : null}
+      {message ? <small className="tableMessage" role="status">{message}</small> : null}
     </div>
   );
 }
