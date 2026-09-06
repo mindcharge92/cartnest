@@ -99,9 +99,9 @@ export function FulfillmentProfileEditor({
     return () => { cancelled = true; };
   }, [form.defaultProvider, stations.length]);
 
-  function setAddressField(
-    key: keyof FulfillmentProfileBodyDto["originAddress"],
-    value: string | undefined,
+  function setAddressField<K extends keyof FulfillmentProfileBodyDto["originAddress"]>(
+    key: K,
+    value: FulfillmentProfileBodyDto["originAddress"][K],
   ) {
     setForm((current) => ({
       ...current,
@@ -135,28 +135,30 @@ export function FulfillmentProfileEditor({
     setMessage(null);
     setSaved(false);
     try {
+      const originAddress: FulfillmentProfileBodyDto["originAddress"] = {
+        recipientName: form.originAddress.recipientName.trim(),
+        phone: form.originAddress.phone.trim(),
+        line1: form.originAddress.line1.trim(),
+        ...(form.originAddress.line2?.trim() ? { line2: form.originAddress.line2.trim() } : {}),
+        city: form.originAddress.city.trim(),
+        state: form.originAddress.state.trim(),
+        ...(form.originAddress.postalCode?.trim()
+          ? { postalCode: form.originAddress.postalCode.trim() }
+          : {}),
+        countryCode: "NG",
+      };
       const body: FulfillmentProfileBodyDto = {
-        ...form,
-        currency: "NGN",
-        originAddress: {
-          ...form.originAddress,
-          recipientName: form.originAddress.recipientName.trim(),
-          phone: form.originAddress.phone.trim(),
-          line1: form.originAddress.line1.trim(),
-          ...(form.originAddress.line2?.trim() ? { line2: form.originAddress.line2.trim() } : {}),
-          city: form.originAddress.city.trim(),
-          state: form.originAddress.state.trim(),
-          ...(form.originAddress.postalCode?.trim()
-            ? { postalCode: form.originAddress.postalCode.trim() }
-            : {}),
-          countryCode: "NG",
-        },
+        defaultProvider: form.defaultProvider,
+        manualDeliveryEnabled: form.manualDeliveryEnabled,
         ...(form.manualDeliveryEnabled && feeMinor !== null
           ? { manualDeliveryFeeAmountMinor: feeMinor }
-          : { manualDeliveryFeeAmountMinor: undefined }),
+          : {}),
+        currency: "NGN",
+        originAddress,
         ...(form.defaultProvider === "GIGL" && form.giglStationId
           ? { giglStationId: form.giglStationId }
-          : { giglStationId: undefined }),
+          : {}),
+        active: form.active ?? true,
       };
       const updated = await logisticsApi.updateStoreFulfillmentProfile(storeId, body);
       const next = bodyFromProfile(updated);
@@ -233,10 +235,13 @@ export function FulfillmentProfileEditor({
             list={`gigl-stations-${storeId}`}
             value={form.giglStationId ?? ""}
             disabled={!canUpdate || busy}
-            onChange={(event) => setForm((current) => ({
-              ...current,
-              giglStationId: event.target.value ? Number(event.target.value) : undefined,
-            }))}
+            onChange={(event) => {
+              const value = event.target.value;
+              setForm((current) => {
+                const { giglStationId: _ignored, ...rest } = current;
+                return value ? { ...rest, giglStationId: Number(value) } : rest;
+              });
+            }}
             required
           />
           <datalist id={`gigl-stations-${storeId}`}>
@@ -251,10 +256,10 @@ export function FulfillmentProfileEditor({
         <label className="field">Contact / sender name<input required minLength={2} maxLength={160} value={form.originAddress.recipientName} disabled={!canUpdate || busy} onChange={(event) => setAddressField("recipientName", event.target.value)} /></label>
         <label className="field">Phone<input required minLength={7} maxLength={32} value={form.originAddress.phone} disabled={!canUpdate || busy} onChange={(event) => setAddressField("phone", event.target.value)} /></label>
         <label className="field">Address line 1<input required minLength={2} maxLength={240} value={form.originAddress.line1} disabled={!canUpdate || busy} onChange={(event) => setAddressField("line1", event.target.value)} /></label>
-        <label className="field">Address line 2<input maxLength={240} value={form.originAddress.line2 ?? ""} disabled={!canUpdate || busy} onChange={(event) => setAddressField("line2", event.target.value || undefined)} /></label>
+        <label className="field">Address line 2<input maxLength={240} value={form.originAddress.line2 ?? ""} disabled={!canUpdate || busy} onChange={(event) => setAddressField("line2", event.target.value)} /></label>
         <label className="field">City<input required minLength={2} maxLength={120} value={form.originAddress.city} disabled={!canUpdate || busy} onChange={(event) => setAddressField("city", event.target.value)} /></label>
         <label className="field">State<input required minLength={2} maxLength={120} value={form.originAddress.state} disabled={!canUpdate || busy} onChange={(event) => setAddressField("state", event.target.value)} /></label>
-        <label className="field">Postal code<input maxLength={32} value={form.originAddress.postalCode ?? ""} disabled={!canUpdate || busy} onChange={(event) => setAddressField("postalCode", event.target.value || undefined)} /></label>
+        <label className="field">Postal code<input maxLength={32} value={form.originAddress.postalCode ?? ""} disabled={!canUpdate || busy} onChange={(event) => setAddressField("postalCode", event.target.value)} /></label>
         <label className="field">Country<input value="Nigeria (NG)" readOnly /></label>
       </div>
 
