@@ -187,7 +187,7 @@ export function VendorShipmentManager({
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setLoadFailed(false);
     setMessage(null);
@@ -195,9 +195,11 @@ export function VendorShipmentManager({
     try {
       const response = await logisticsApi.listVendorOrderShipments(order.id);
       setShipments(response.items);
+      return true;
     } catch (caught) {
       setLoadFailed(true);
       setMessage(apiErrorMessage(caught, "CartNest could not load shipments for this vendor order."));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -256,10 +258,12 @@ export function VendorShipmentManager({
       setQuantities({});
       setTrackingNumber("");
       setNote("");
-      await load();
+      const refreshed = await load();
       await onOrderChanged();
-      setMessage("Shipment created. Allocated quantities are now reserved against this vendor order.");
-      setSuccess(true);
+      if (refreshed) {
+        setMessage("Shipment created. Allocated quantities are now reserved against this vendor order.");
+        setSuccess(true);
+      }
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not create this shipment."));
     } finally {
