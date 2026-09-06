@@ -23,10 +23,10 @@ function segment(value: string): string {
   return encodeURIComponent(value);
 }
 
-function queryString(values: Record<string, string | number | undefined>): string {
+function queryString(values: object): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) {
-    if (value !== undefined) params.set(key, String(value));
+  for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+    if (typeof value === "string" || typeof value === "number") params.set(key, String(value));
   }
   const text = params.toString();
   return text ? `?${text}` : "";
