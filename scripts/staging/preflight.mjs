@@ -18,6 +18,8 @@ async function fileExists(path) {
 }
 
 const requiredFiles = [
+  ".github/workflows/staging.yml",
+  ".github/workflows/staging-rollback.yml",
   "deploy/staging/compose.yaml",
   "deploy/staging/compose.release.yaml",
   "deploy/staging/Caddyfile",
