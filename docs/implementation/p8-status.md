@@ -1,8 +1,8 @@
 # P8 — Logistics, Shipping Quotes, Shipments, and Tracking Status
 
 **Phase:** P8  
-**Status:** Backend/domain source baseline implemented; GIGL live booking payload, BullMQ runtime wiring, Prisma generation/migration execution, typed-client regeneration, frontend UI/integration, provider sandbox verification, and CI exit-gate evidence remain pending  
-**Updated:** 5 September 2026
+**Status:** Backend/domain and FP8 frontend source baselines implemented; GIGL live booking payload, BullMQ runtime wiring, Prisma generation/migration execution, OpenAPI/generated-client regeneration, provider sandbox verification, and CI exit-gate evidence remain pending  
+**Updated:** 6 September 2026
 
 ## 1. Scope
 
@@ -27,9 +27,13 @@ Implemented source baseline:
 - GIGL tracking-sync job primitive;
 - audit/outbox events for shipment creation/state changes;
 - P8 database constraints and indexes;
-- TypeBox/OpenAPI route contracts and route/mapping tests.
+- TypeBox/OpenAPI route contracts and route/mapping tests;
+- Next.js store fulfillment and variant shipping configuration;
+- checkout quote/station integration;
+- vendor shipment creation/status UX;
+- buyer shipment allocation and tracking-event presentation.
 
-The frontend remains deferred according to the current project plan. After backend phases finish, CartNest will circle back through the same phases for Next.js UI and generated-client integration.
+The frontend pass has now reached FP8. The source-level integration is documented in [`frontend-p8-status.md`](frontend-p8-status.md). Runtime/browser/provider evidence remains separate from source completion.
 
 ## 2. Provider-Neutral Domain
 
@@ -107,15 +111,15 @@ P7 commission policy
         v
 LogisticsAwareCheckoutFinancialPolicy
         |
-        +-- discount (still P10)
-        +-- tax (still P10)
+        +-- discount (P10)
+        +-- tax (P10)
         +-- commission (P7)
         +-- delivery (P8 persisted quote)
 ```
 
 Checkout fails with `409 SHIPPING_QUOTE_REQUIRED` when any represented store lacks a valid quote.
 
-Production checkout remains deliberately disabled until P10 supplies configured tax/promotion policy. P8 does not weaken that production gate.
+P10 has since supplied the configured tax/promotion financial policy. P8's delivery composition remains the logistics component in that policy chain.
 
 ## 6. GIGL Quote Adapter
 
@@ -196,6 +200,8 @@ A shipment may be created only when:
 - every requested OrderItem belongs to that VendorOrder;
 - quantities do not exceed remaining unallocated quantities.
 
+The FP8 vendor UI mirrors these rules for clear feedback, but server/database validation remains authoritative.
+
 Browser-supplied store/vendor ownership is never accepted as authorization evidence.
 
 ## 10. Manual/Self-Delivery
@@ -259,8 +265,11 @@ The delivery transition is persisted and evented so P9 review eligibility and fu
 P8 establishes:
 
 ```text
+GET  /api/v1/stores/:storeId/fulfillment-profile
 PUT  /api/v1/stores/:storeId/fulfillment-profile
+GET  /api/v1/variants/:variantId/shipping-profile
 PUT  /api/v1/variants/:variantId/shipping-profile
+GET  /api/v1/logistics/stations
 POST /api/v1/logistics/quotes
 
 POST /api/v1/vendor-orders/:vendorOrderId/shipments
@@ -272,6 +281,8 @@ GET  /api/v1/shipments/:shipmentId
 ```
 
 Write operations use the existing CSRF/session boundary. Vendor operations re-resolve server-side store membership/permission. Buyer shipment queries prove ownership from the parent order.
+
+The handwritten typed logistics bridge now exposes this complete surface to FP8 while OpenAPI/generated-client regeneration remains an unexecuted runtime gate.
 
 ## 14. Background Tracking Synchronization
 
@@ -307,7 +318,8 @@ The required PostgreSQL constraint source adds:
 - positive variant shipping weight/pieces/dimensions;
 - ShippingQuote ownership/expiry checks;
 - Shipment delivered-timestamp consistency;
-- ShipmentItem foreign keys and positive quantity.
+- ShipmentItem foreign keys and positive quantity;
+- atomic shipment allocation enforcement under a locked VendorOrder.
 
 These constraints are reviewed migration source and still require generated migration inspection/execution before becoming runtime evidence.
 
@@ -319,11 +331,31 @@ Source tests include:
 - TypeBox rejection of zero-weight variant shipping profiles;
 - TypeBox rejection of empty shipment allocations;
 - GIGL scan-code normalization cases;
-- conservative unknown scan-code behavior.
+- conservative unknown scan-code behavior;
+- buyer shipment mapping regression coverage proving hydrated ShipmentItem allocations are present in both order-level and single-shipment responses.
 
-They remain committed tests, not claimed passing CI evidence, because the repository Actions workflow still fails before job creation.
+The buyer mapping test was added after FP8 integration found that `BuyerLogisticsQueryService` omitted the required `ShipmentDto.items` field even though the repository hydrated the allocations. The mapper has been corrected.
 
-## 17. Security and Integrity Invariants
+These remain committed tests, not claimed passing CI evidence, because the repository Actions workflow still fails before job creation.
+
+## 17. Frontend FP8 Integration
+
+The Next.js frontend now provides:
+
+- checkout delivery address and per-store quote UX;
+- GIGL receiver-station selection;
+- store fulfillment-profile configuration;
+- per-variant physical shipping configuration;
+- vendor MANUAL shipment creation;
+- remaining-quantity feedback for split/multiple shipments;
+- valid manual status-transition controls;
+- buyer shipment tracking with item allocations and event history;
+- loading, empty, error and refresh states;
+- vendor permission-aware mutation controls.
+
+See [`frontend-p8-status.md`](frontend-p8-status.md) for the detailed frontend exit-gate state.
+
+## 18. Security and Integrity Invariants
 
 P8 preserves these invariants:
 
@@ -340,7 +372,7 @@ P8 preserves these invariants:
 11. delivery is auditable and server-derived;
 12. GIGL live booking remains blocked until provider-contract evidence exists.
 
-## 18. Exit-Gate Status
+## 19. Exit-Gate Status
 
 | P8 Exit Criterion | Source status |
 | --- | --- |
@@ -349,18 +381,20 @@ P8 preserves these invariants:
 | GIGL outage does not corrupt order state | Implemented source behavior |
 | manual shipment independently usable | Implemented |
 | multiple shipments per VendorOrder | Implemented |
-| shipment allocation cannot exceed OrderItem quantity | Implemented |
+| shipment allocation cannot exceed OrderItem quantity | Implemented, including DB-level atomic guard source |
 | delivered state is auditable | Implemented |
 | buyer/vendor tracking API boundaries exist | Implemented |
+| buyer tracking includes shipment allocations | Implemented; regression test committed |
 | GIGL quote adapter exists | Implemented, sandbox verification pending |
 | GIGL live booking | Deliberately gated pending contracted sandbox payload |
 | shipment-sync job primitive | Implemented |
 | BullMQ runtime/cadence evidence | Pending |
 | Prisma generation/migration execution | Pending |
 | automated typecheck/tests/build evidence | Pending due GitHub Actions startup blocker |
-| frontend UI/generated-client integration | Deferred by current project plan |
+| frontend FP8 UI/typed API integration | Implemented source baseline |
+| OpenAPI/generated-client regeneration | Pending execution |
 
-## 19. Next Backend Phase
+## 20. Next Backend Phase
 
 P9 is **Returns, Refunds, and Reviews**:
 
