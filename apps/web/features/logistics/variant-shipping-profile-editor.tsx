@@ -35,12 +35,12 @@ export function VariantShippingProfileEditor({
   canUpdate: boolean;
 }>) {
   const [form, setForm] = useState<ShippingFormState>(EMPTY);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setState("loading");
     setMessage(null);
     try {
       const profile = await logisticsApi.getVariantShippingProfile(variantId);
@@ -51,22 +51,23 @@ export function VariantShippingProfileEditor({
         heightMm: profile.heightMm === null ? "" : String(profile.heightMm),
         pieces: String(profile.pieces),
       });
+      setState("ready");
     } catch (caught) {
       if (apiErrorCode(caught) === "VARIANT_SHIPPING_PROFILE_NOT_FOUND") {
         setForm(EMPTY);
         setMessage("Shipping details required for GIGL quotes.");
+        setState("ready");
       } else {
         setMessage(apiErrorMessage(caught, "Could not load shipping details."));
+        setState("error");
       }
-    } finally {
-      setLoading(false);
     }
   }, [variantId]);
 
   useEffect(() => { void load(); }, [load]);
 
   async function save() {
-    if (!canUpdate) return;
+    if (!canUpdate || state !== "ready") return;
     const weightGrams = positiveInteger(form.weightGrams, true);
     const pieces = positiveInteger(form.pieces, true);
     const lengthMm = positiveInteger(form.lengthMm, false);
@@ -109,7 +110,15 @@ export function VariantShippingProfileEditor({
     }
   }
 
-  if (loading) return <small className="tableMessage">Loading shipping…</small>;
+  if (state === "loading") return <small className="tableMessage">Loading shipping…</small>;
+  if (state === "error") {
+    return (
+      <div className="commerceStack">
+        <small className="tableMessage" role="alert">{message ?? "Could not load shipping details."}</small>
+        <button className="secondaryButton compactButton" type="button" onClick={() => void load()}>Retry shipping</button>
+      </div>
+    );
+  }
 
   return (
     <div className="commerceStack">
