@@ -14,10 +14,12 @@ function pathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
-function withQuery(path: string, query: Readonly<Record<string, string | number | boolean | undefined>>): string {
+function withQuery(path: string, query: object): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined) params.set(key, String(value));
+  for (const [key, value] of Object.entries(query as Record<string, unknown>)) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      params.set(key, String(value));
+    }
   }
   const suffix = params.toString();
   return suffix ? `${path}?${suffix}` : path;
