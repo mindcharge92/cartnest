@@ -8,7 +8,7 @@ import type {
   ProcessPrivacyRequestBodyDto,
 } from "@repo/contracts";
 import type { DatabaseClient } from "@repo/database";
-import { writeAuditEntry } from "@repo/database";
+import { Prisma, writeAuditEntry } from "@repo/database";
 import {
   requirePlatformRole,
   requirePrivilegedMfa,
@@ -231,9 +231,9 @@ export class PrivacyService {
   }
 
   async requestErasure(principal: AccessPrincipal): Promise<PrivacyRequestDto> {
-    const activeWhere = {
+    const activeWhere: Prisma.PrivacyRequestWhereInput = {
       userId: principal.userId,
-      status: { in: ["PENDING", "REQUIRES_REVIEW"] as const },
+      status: { in: ["PENDING", "REQUIRES_REVIEW"] },
     };
     const existing = await this.database.privacyRequest.findFirst({
       where: activeWhere,
