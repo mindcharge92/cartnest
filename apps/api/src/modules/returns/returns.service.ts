@@ -1,9 +1,12 @@
 import type {
+  AdminReviewListQueryDto,
   CreateProductReviewBodyDto,
   CreateRefundBodyDto,
   CreateReturnBodyDto,
   CreateStoreReviewBodyDto,
   RefundDto,
+  RefundListQueryDto,
+  RefundListResponseDto,
   ReturnListQueryDto,
   ReturnListResponseDto,
   ReturnRequestDto,
@@ -43,7 +46,25 @@ function money(amountMinor: bigint, currency: string) {
   return { amountMinor: amountMinor.toString(), currency };
 }
 
-function mapRefund(record: RefundRecord | ReturnRecord["refunds"][number]): RefundDto {
+type RefundMapRecord = Pick<
+  RefundRecord,
+  | "id"
+  | "paymentIntentId"
+  | "vendorOrderId"
+  | "orderItemId"
+  | "returnRequestId"
+  | "provider"
+  | "providerRefundReference"
+  | "amountMinor"
+  | "currency"
+  | "reason"
+  | "status"
+  | "createdAt"
+  | "completedAt"
+  | "updatedAt"
+>;
+
+function mapRefund(record: RefundMapRecord | ReturnRecord["refunds"][number]): RefundDto {
   return {
     id: record.id,
     paymentIntentId: record.paymentIntentId,
@@ -83,7 +104,19 @@ function mapReturn(record: ReturnRecord): ReturnRequestDto {
   };
 }
 
-function mapReview(type: "PRODUCT" | "STORE", record: { id: string; productId?: string; storeId?: string; rating: number; text: string | null; status: ReviewDto["status"]; createdAt: Date; updatedAt: Date }): ReviewDto {
+function mapReview(
+  type: "PRODUCT" | "STORE",
+  record: {
+    id: string;
+    productId?: string;
+    storeId?: string;
+    rating: number;
+    text: string | null;
+    status: ReviewDto["status"];
+    createdAt: Date;
+    updatedAt: Date;
+  },
+): ReviewDto {
   const targetId = type === "PRODUCT" ? record.productId : record.storeId;
   if (!targetId) throw new Error("Review target is missing.");
   return {
@@ -96,6 +129,15 @@ function mapReview(type: "PRODUCT" | "STORE", record: { id: string; productId?: 
     verifiedPurchase: true,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function pagination(page: number, pageSize: number, totalItems: number) {
+  return {
+    page,
+    pageSize,
+    totalItems,
+    totalPages: totalItems ? Math.ceil(totalItems / pageSize) : 0,
   };
 }
 
@@ -137,9 +179,27 @@ export class ReturnsService {
   }
 
   async listBuyerReturns(principal: AccessPrincipal, query: ReturnListQueryDto): Promise<ReturnListResponseDto> {
-    const page = query.page ?? 1; const pageSize = query.pageSize ?? 20;
-    const result = await this.repository.listBuyerReturns({ userId: principal.userId, ...(query.status ? { status: query.status } : {}), page, pageSize });
-    return { items: result.items.map(mapReturn), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems ? Math.ceil(result.totalItems / pageSize) : 0 } };
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = {
+      userId: principal.userId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.vendorOrderId ? { vendorOrderId: query.vendorOrderId } : {}),
+    };
+    const [items, totalItems] = await Promise.all([
+      this.database.returnRequest.findMany({
+        where,
+        include: {
+          items: { orderBy: { createdAt: "asc" } },
+          refunds: { orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { requestedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.returnRequest.count({ where }),
+    ]);
+    return { items: items.map(mapReturn), pagination: pagination(page, pageSize, totalItems) };
   }
 
   async cancelBuyerReturn(principal: AccessPrincipal, returnRequestId: string): Promise<ReturnRequestDto> {
@@ -153,9 +213,27 @@ export class ReturnsService {
 
   async listStoreReturns(principal: AccessPrincipal, storeId: string, query: ReturnListQueryDto): Promise<ReturnListResponseDto> {
     await this.vendorBoundary.requireStorePermission(principal, storeId, "order:read");
-    const page = query.page ?? 1; const pageSize = query.pageSize ?? 20;
-    const result = await this.repository.listStoreReturns({ storeId, ...(query.status ? { status: query.status } : {}), page, pageSize });
-    return { items: result.items.map(mapReturn), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems ? Math.ceil(result.totalItems / pageSize) : 0 } };
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = {
+      vendorOrder: { storeId },
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.vendorOrderId ? { vendorOrderId: query.vendorOrderId } : {}),
+    };
+    const [items, totalItems] = await Promise.all([
+      this.database.returnRequest.findMany({
+        where,
+        include: {
+          items: { orderBy: { createdAt: "asc" } },
+          refunds: { orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { requestedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.returnRequest.count({ where }),
+    ]);
+    return { items: items.map(mapReturn), pagination: pagination(page, pageSize, totalItems) };
   }
 
   async updateReturnStatus(principal: AccessPrincipal, returnRequestId: string, body: UpdateReturnStatusBodyDto): Promise<ReturnRequestDto> {
@@ -196,14 +274,57 @@ export class ReturnsService {
     throw new ReturnsError("REFUND_SCOPE_INVALID", "Refund scope could not be resolved.", 404);
   }
 
+  async listVendorOrderRefunds(
+    principal: AccessPrincipal,
+    vendorOrderId: string,
+    query: RefundListQueryDto,
+  ): Promise<RefundListResponseDto> {
+    const vendorOrder = await this.database.vendorOrder.findUnique({
+      where: { id: vendorOrderId },
+      select: { storeId: true },
+    });
+    if (!vendorOrder) throw new ReturnsError("VENDOR_ORDER_NOT_FOUND", "Vendor order was not found.", 404);
+    await this.vendorBoundary.requireStorePermission(principal, vendorOrder.storeId, "order:read");
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = {
+      vendorOrderId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [items, totalItems] = await Promise.all([
+      this.database.refund.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.refund.count({ where }),
+    ]);
+    return { items: items.map(mapRefund), pagination: pagination(page, pageSize, totalItems) };
+  }
+
+  async listAdminRefunds(query: RefundListQueryDto): Promise<RefundListResponseDto> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = query.status ? { status: query.status } : {};
+    const [items, totalItems] = await Promise.all([
+      this.database.refund.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.refund.count({ where }),
+    ]);
+    return { items: items.map(mapRefund), pagination: pagination(page, pageSize, totalItems) };
+  }
+
   async approveAndExecuteRefund(principal: AccessPrincipal, refundId: string): Promise<RefundDto> {
     const existing = await this.repository.findRefund(refundId);
     if (!existing) throw new ReturnsError("REFUND_NOT_FOUND", "Refund was not found.", 404);
     if (existing.status === "SUCCEEDED" || existing.status === "PROCESSING") return mapRefund(existing);
     if (existing.status !== "REQUESTED" && existing.status !== "APPROVED") throw new ReturnsError("REFUND_NOT_EXECUTABLE", "Refund cannot be executed in its current state.", 409);
 
-    // Atomic claim before the external call: only one concurrent approval can
-    // move this refund into PROCESSING and reach the provider.
     const claimed = await this.database.refund.updateMany({
       where: { id: refundId, status: { in: ["REQUESTED", "APPROVED"] } },
       data: { status: "PROCESSING" },
@@ -223,8 +344,6 @@ export class ReturnsService {
       throw new ReturnsError("REFUND_PROVIDER_REJECTED", result.message, 502);
     }
     if (result.kind === "ambiguous") {
-      // PROCESSING is deliberately retained. A second refund is forbidden while
-      // the provider outcome is unknown; reconciliation must resolve it.
       throw new ReturnsError("REFUND_OUTCOME_UNKNOWN", "The provider refund outcome is unknown. CartNest will reconcile before another refund is allowed.", 409);
     }
     return mapRefund(await this.repository.markRefundSubmitted({ refundId, providerRefundReference: result.providerRefundReference, succeeded: result.status === "SUCCEEDED" }));
@@ -261,12 +380,44 @@ export class ReturnsService {
 
   async listProductReviews(productId: string, page = 1, pageSize = 20): Promise<ReviewListResponseDto> {
     const result = await this.repository.listProductReviews(productId, page, pageSize);
-    return { items: result.items.map((row) => mapReview("PRODUCT", row)), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems ? Math.ceil(result.totalItems / pageSize) : 0 } };
+    return { items: result.items.map((row) => mapReview("PRODUCT", row)), pagination: pagination(page, pageSize, result.totalItems) };
   }
 
   async listStoreReviews(storeId: string, page = 1, pageSize = 20): Promise<ReviewListResponseDto> {
     const result = await this.repository.listStoreReviews(storeId, page, pageSize);
-    return { items: result.items.map((row) => mapReview("STORE", row)), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems ? Math.ceil(result.totalItems / pageSize) : 0 } };
+    return { items: result.items.map((row) => mapReview("STORE", row)), pagination: pagination(page, pageSize, result.totalItems) };
+  }
+
+  async listAdminReviews(query: AdminReviewListQueryDto): Promise<ReviewListResponseDto> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const takePerType = page * pageSize;
+    const productWhere = {
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const storeWhere = {
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const includeProducts = !query.targetType || query.targetType === "PRODUCT";
+    const includeStores = !query.targetType || query.targetType === "STORE";
+    const [products, stores, productCount, storeCount] = await Promise.all([
+      includeProducts
+        ? this.database.productReview.findMany({ where: productWhere, orderBy: { createdAt: "desc" }, take: takePerType })
+        : Promise.resolve([]),
+      includeStores
+        ? this.database.storeReview.findMany({ where: storeWhere, orderBy: { createdAt: "desc" }, take: takePerType })
+        : Promise.resolve([]),
+      includeProducts ? this.database.productReview.count({ where: productWhere }) : Promise.resolve(0),
+      includeStores ? this.database.storeReview.count({ where: storeWhere }) : Promise.resolve(0),
+    ]);
+    const items = [
+      ...products.map((row) => mapReview("PRODUCT", row)),
+      ...stores.map((row) => mapReview("STORE", row)),
+    ]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice((page - 1) * pageSize, page * pageSize);
+    const totalItems = productCount + storeCount;
+    return { items, pagination: pagination(page, pageSize, totalItems) };
   }
 
   async moderateReview(principal: AccessPrincipal, reviewId: string, body: ReviewModerationBodyDto): Promise<ReviewDto> {
