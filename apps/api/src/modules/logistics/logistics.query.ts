@@ -17,6 +17,10 @@ function mapShipment(record: ShipmentRecord): ShipmentDto {
     trackingNumber: record.trackingNumber,
     status: record.status,
     fee: record.feeAmountMinor !== null && record.currency ? money(record.feeAmountMinor, record.currency) : null,
+    items: record.items.map((item) => ({
+      orderItemId: item.orderItemId,
+      quantity: item.quantity,
+    })),
     deliveredAt: record.deliveredAt?.toISOString() ?? null,
     events: record.events.map((event) => ({
       id: event.id,
