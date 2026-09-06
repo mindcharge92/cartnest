@@ -24,7 +24,7 @@ const MANUAL_NEXT: Readonly<Record<ShipmentStatusDto, readonly ShipmentStatusDto
   CANCELLED: [],
 };
 
-function itemNameMap(orderItems: readonly VendorOrderDto["items"][number][]): Map<string, string> {
+function itemNameMap(orderItems: ReadonlyArray<VendorOrderDto["items"][number]>): Map<string, string> {
   return new Map(orderItems.map((item) => [item.id, `${item.productName} · ${item.sku}`]));
 }
 
@@ -214,20 +214,28 @@ export function VendorShipmentManager({
     return new Map(order.items.map((item) => [item.id, Math.max(0, item.quantity - (allocated.get(item.id) ?? 0))]));
   }, [order.items, shipments]);
   const unitsRemaining = [...remaining.values()].reduce((sum, quantity) => sum + quantity, 0);
+  const orderCanShip = order.paymentStatus === "SUCCEEDED" && !["CANCELLED", "REFUNDED"].includes(order.status);
+  const canCreateShipment = canFulfill && orderCanShip && unitsRemaining > 0;
 
   async function createShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canFulfill) return;
-    const items = order.items.flatMap((item) => {
+    if (!canCreateShipment) return;
+
+    const items: Array<{ orderItemId: string; quantity: number }> = [];
+    for (const item of order.items) {
       const raw = quantities[item.id]?.trim() ?? "";
-      if (!raw) return [];
+      if (!raw) continue;
       const quantity = Number(raw);
       const available = remaining.get(item.id) ?? 0;
-      if (!Number.isInteger(quantity) || quantity < 1 || quantity > available) return [];
-      return [{ orderItemId: item.id, quantity }];
-    });
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > available) {
+        setMessage(`Enter a whole shipment quantity between 1 and ${available} for ${item.productName}.`);
+        setSuccess(false);
+        return;
+      }
+      items.push({ orderItemId: item.id, quantity });
+    }
     if (items.length === 0) {
-      setMessage("Enter at least one valid shipment quantity that does not exceed the remaining units.");
+      setMessage("Enter at least one shipment quantity.");
       setSuccess(false);
       return;
     }
@@ -270,7 +278,7 @@ export function VendorShipmentManager({
 
       {message ? <p className={success ? "formMessage formMessageSuccess" : "formMessage formMessageError"} role="status">{message}</p> : null}
 
-      {canFulfill && unitsRemaining > 0 ? (
+      {canCreateShipment ? (
         <form className="panel sellerForm" onSubmit={createShipment}>
           <div className="sectionHeadingCompact"><div><h3>Create manual shipment</h3><p>GIGL live booking remains intentionally gated until its contracted sandbox payload is verified. Manual/self-delivery stays fully usable.</p></div><span className="statusPill">{unitsRemaining} unit(s) remaining</span></div>
           <div className="orderItemList">
@@ -294,7 +302,9 @@ export function VendorShipmentManager({
       ) : null}
 
       {!canFulfill ? <p className="formMessage">Your membership can view shipment tracking but does not include order:fulfill.</p> : null}
-      {canFulfill && unitsRemaining === 0 && order.items.length > 0 ? <p className="formMessage formMessageSuccess">All ordered units are allocated to active shipments.</p> : null}
+      {canFulfill && order.paymentStatus !== "SUCCEEDED" ? <p className="formMessage">Shipment creation unlocks only after the parent payment is verified as successful.</p> : null}
+      {canFulfill && order.paymentStatus === "SUCCEEDED" && ["CANCELLED", "REFUNDED"].includes(order.status) ? <p className="formMessage">This cancelled or refunded vendor order cannot be fulfilled.</p> : null}
+      {canFulfill && orderCanShip && unitsRemaining === 0 && order.items.length > 0 ? <p className="formMessage formMessageSuccess">All ordered units are allocated to active shipments.</p> : null}
       {loading && shipments.length === 0 ? <p className="formMessage">Loading shipments…</p> : null}
       {!loading && shipments.length === 0 ? <p className="formMessage">No shipment has been created for this store order yet.</p> : null}
       {shipments.map((shipment) => <ShipmentCard key={shipment.id} shipment={shipment} itemNames={names} canUpdateManual={canFulfill} onUpdated={shipmentUpdated} />)}
