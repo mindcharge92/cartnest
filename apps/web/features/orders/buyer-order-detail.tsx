@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { ErrorState, LoadingState } from "../../components/page-state";
 import { apiErrorCode, apiErrorMessage, ordersApi } from "../../lib/api";
 import { formatMoney } from "../catalog/catalog-utils";
+import { BuyerShipmentTracking } from "../logistics/shipment-tracking";
 import { isUnpaidOpenOrder, orderStatusClass, orderStatusLabel } from "./order-ui";
 
 function variantLabel(item: VendorOrderDto["items"][number]): string {
@@ -151,6 +152,8 @@ export function BuyerOrderDetail({ orderId }: Readonly<{ orderId: string }>) {
               </article>
             ))}
           </section>
+
+          <BuyerShipmentTracking order={order} />
         </div>
 
         <aside className="commerceSummary orderTotalPanel" aria-label="Order totals">
