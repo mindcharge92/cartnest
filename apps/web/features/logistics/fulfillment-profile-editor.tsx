@@ -61,7 +61,7 @@ export function FulfillmentProfileEditor({
   const [form, setForm] = useState<FulfillmentProfileBodyDto>(EMPTY_PROFILE);
   const [feeNaira, setFeeNaira] = useState("0.00");
   const [stations, setStations] = useState<readonly LogisticsStationDto[]>([]);
-  const [state, setState] = useState<"loading" | "ready">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -75,29 +75,30 @@ export function FulfillmentProfileEditor({
       const next = bodyFromProfile(profile);
       setForm(next);
       setFeeNaira(minorToNaira(next.manualDeliveryFeeAmountMinor));
+      setState("ready");
     } catch (caught) {
       if (apiErrorCode(caught) === "FULFILLMENT_PROFILE_NOT_FOUND") {
         setForm(EMPTY_PROFILE);
         setFeeNaira("0.00");
         setMessage("No fulfillment profile exists yet. Configure one before buyers request delivery quotes.");
+        setState("ready");
       } else {
         setMessage(apiErrorMessage(caught, "CartNest could not load this store's fulfillment profile."));
+        setState("error");
       }
-    } finally {
-      setState("ready");
     }
   }, [storeId]);
 
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    if (form.defaultProvider !== "GIGL" || stations.length > 0) return;
+    if (state !== "ready" || form.defaultProvider !== "GIGL" || stations.length > 0) return;
     let cancelled = false;
     void logisticsApi.listStations()
       .then((response) => { if (!cancelled) setStations(response.items); })
       .catch(() => { /* Sender station can still be entered by ID when provider lookup is unavailable. */ });
     return () => { cancelled = true; };
-  }, [form.defaultProvider, stations.length]);
+  }, [form.defaultProvider, state, stations.length]);
 
   function setAddressField<K extends keyof FulfillmentProfileBodyDto["originAddress"]>(
     key: K,
@@ -112,7 +113,7 @@ export function FulfillmentProfileEditor({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canUpdate) return;
+    if (!canUpdate || state !== "ready") return;
 
     const feeMinor = form.manualDeliveryEnabled ? nairaToMinor(feeNaira) : null;
     if (form.manualDeliveryEnabled && feeMinor === null) {
@@ -171,6 +172,17 @@ export function FulfillmentProfileEditor({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (state === "error") {
+    return (
+      <section className="panel sellerForm">
+        <div className="sectionHeadingCompact"><div><p className="eyebrow">FP8 fulfillment</p><h2>Delivery configuration</h2></div></div>
+        <p className="formMessage formMessageError" role="alert">{message ?? "CartNest could not load the fulfillment profile."}</p>
+        <div className="actionRow"><button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button></div>
+        <p className="fieldHint">Editing is disabled until the authoritative server profile loads successfully.</p>
+      </section>
+    );
   }
 
   return (
