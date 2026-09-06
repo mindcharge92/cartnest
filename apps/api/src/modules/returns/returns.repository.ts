@@ -7,7 +7,12 @@ import type {
   ReturnStatusDto,
   ReviewStatusDto,
 } from "@repo/contracts";
-import { Prisma, type DatabaseClient, enqueueOutboxEvent, writeAuditEntry } from "@repo/database";
+import {
+  Prisma,
+  type DatabaseClient,
+  enqueueOutboxEvent,
+  writeAuditEntry,
+} from "@repo/database";
 
 const returnInclude = {
   items: { orderBy: { createdAt: "asc" as const } },
@@ -37,11 +42,27 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-async function lockVendorOrder(tx: Prisma.TransactionClient, vendorOrderId: string): Promise<boolean> {
+async function lockVendorOrder(
+  tx: Prisma.TransactionClient,
+  vendorOrderId: string,
+): Promise<boolean> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT "id"
     FROM "VendorOrder"
     WHERE "id" = ${vendorOrderId}::uuid
+    FOR UPDATE
+  `);
+  return rows.length === 1;
+}
+
+async function lockReturnRequest(
+  tx: Prisma.TransactionClient,
+  returnRequestId: string,
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "ReturnRequest"
+    WHERE "id" = ${returnRequestId}::uuid
     FOR UPDATE
   `);
   return rows.length === 1;
@@ -52,9 +73,9 @@ export class PrismaReturnsRepository {
 
   async createReturn(userId: string, body: CreateReturnBodyDto): Promise<ReturnRecord> {
     const id = await this.database.$transaction(async (tx) => {
-      // Serialize return-allocation checks for one commercial VendorOrder. Without this lock,
-      // two concurrent requests can both observe the same prior allocation and over-return.
-      if (!(await lockVendorOrder(tx, body.vendorOrderId))) throw new Error("VENDOR_ORDER_NOT_FOUND");
+      if (!(await lockVendorOrder(tx, body.vendorOrderId))) {
+        throw new Error("VENDOR_ORDER_NOT_FOUND");
+      }
 
       const vendorOrder = await tx.vendorOrder.findFirst({
         where: { id: body.vendorOrderId, order: { userId } },
@@ -75,13 +96,17 @@ export class PrismaReturnsRepository {
         },
         _sum: { quantity: true },
       });
-      const priorByItem = new Map(prior.map((row) => [row.orderItemId, row._sum.quantity ?? 0]));
+      const priorByItem = new Map(
+        prior.map((row) => [row.orderItemId, row._sum.quantity ?? 0]),
+      );
 
       for (const item of body.items) {
         const orderItem = byId.get(item.orderItemId);
         if (!orderItem) throw new Error("RETURN_ITEM_NOT_IN_ORDER");
         const already = priorByItem.get(item.orderItemId) ?? 0;
-        if (already + item.quantity > orderItem.quantity) throw new Error("RETURN_QUANTITY_EXCEEDED");
+        if (already + item.quantity > orderItem.quantity) {
+          throw new Error("RETURN_QUANTITY_EXCEEDED");
+        }
       }
 
       const created = await tx.returnRequest.create({
@@ -227,6 +252,11 @@ export class PrismaReturnsRepository {
 
   async restockReturn(returnRequestId: string, actorUserId: string): Promise<number> {
     return this.database.$transaction(async (tx) => {
+      // Explicit restocking is idempotent only if competing restock commands are serialized.
+      // A non-unique InventoryAdjustment index alone does not prevent two callers from both
+      // observing "no adjustment" and incrementing stock.
+      if (!(await lockReturnRequest(tx, returnRequestId))) throw new Error("RETURN_NOT_FOUND");
+
       const request = await tx.returnRequest.findUnique({
         where: { id: returnRequestId },
         include: { items: { include: { orderItem: true } } },
@@ -315,8 +345,6 @@ export class PrismaReturnsRepository {
           return { kind: "in_progress" as const };
         }
 
-        // Distinct idempotency keys still share one economic capacity. Serialize them on the
-        // VendorOrder so concurrent refund requests cannot both reserve the same remaining value.
         if (!(await lockVendorOrder(tx, input.vendorOrderId))) return { kind: "not_found" as const };
 
         const vendorOrder = await tx.vendorOrder.findUnique({
@@ -497,15 +525,26 @@ export class PrismaReturnsRepository {
     status: "PROCESSING" | "SUCCEEDED" | "FAILED",
   ): Promise<RefundRecord> {
     return this.database.$transaction(async (tx) => {
-      const refund = await tx.refund.update({
-        where: { id: refundId },
+      if (status === "PROCESSING") {
+        return tx.refund.findUniqueOrThrow({ where: { id: refundId }, include: refundInclude });
+      }
+
+      // Reconciliation may run concurrently in an admin request and a worker. Only one caller
+      // may move PROCESSING to a terminal state and emit terminal aggregate/outbox effects.
+      const changed = await tx.refund.updateMany({
+        where: { id: refundId, status: "PROCESSING" },
         data: {
           status,
           ...(status === "SUCCEEDED" ? { completedAt: new Date() } : {}),
         },
+      });
+      const refund = await tx.refund.findUniqueOrThrow({
+        where: { id: refundId },
         include: refundInclude,
       });
-      if (status === "SUCCEEDED") await this.applyRefundAggregate(tx, refund);
+      if (changed.count === 1 && status === "SUCCEEDED") {
+        await this.applyRefundAggregate(tx, refund);
+      }
       return refund;
     });
   }
@@ -670,10 +709,7 @@ export class PrismaReturnsRepository {
           action: "review.moderated",
           entityType: "ProductReview",
           entityId: input.reviewId,
-          metadata: {
-            status: input.status,
-            ...(input.reason ? { reason: input.reason } : {}),
-          },
+          metadata: { status: input.status, ...(input.reason ? { reason: input.reason } : {}) },
         });
         return { type: "PRODUCT" as const, record: changed };
       });
@@ -692,10 +728,7 @@ export class PrismaReturnsRepository {
         action: "review.moderated",
         entityType: "StoreReview",
         entityId: input.reviewId,
-        metadata: {
-          status: input.status,
-          ...(input.reason ? { reason: input.reason } : {}),
-        },
+        metadata: { status: input.status, ...(input.reason ? { reason: input.reason } : {}) },
       });
       return { type: "STORE" as const, record: changed };
     });
