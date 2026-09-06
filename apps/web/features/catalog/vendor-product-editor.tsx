@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
 import { apiErrorMessage, catalogApi } from "../../lib/api";
+import { VariantShippingProfileEditor } from "../logistics/variant-shipping-profile-editor";
 import { hasVendorPermission } from "../vendor/permissions";
 import { useVendorAccess } from "../vendor/use-vendor-access";
 import { VendorStatusPill, VendorWorkspaceShell } from "../vendor/vendor-workspace-shell";
@@ -82,6 +83,7 @@ function VariantEditor({
       <td><input aria-label={`SKU for ${variant.sku}`} value={sku} onChange={(event) => setSku(event.target.value)} maxLength={100} disabled={!canUpdate || busy} /></td>
       <td><input aria-label={`Price for ${variant.sku}`} inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} disabled={!canUpdate || busy} /></td>
       <td><select aria-label={`Status for ${variant.sku}`} value={status} onChange={(event) => setStatus(event.target.value as ProductVariantDto["status"])} disabled={!canUpdate || busy}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></td>
+      <td><VariantShippingProfileEditor variantId={variant.id} canUpdate={canUpdate} /></td>
       <td>
         {canUpdate ? <button className="secondaryButton compactButton" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</button> : null}
         {message ? <small className="tableMessage" role="status">{message}</small> : null}
@@ -311,7 +313,7 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
       setNewSku("");
       setNewPrice("");
       await load();
-      setMessage("Variant added. Moderation status may have been re-evaluated.");
+      setMessage("Variant added. Add its shipping weight before using GIGL fulfillment.");
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not add this variant."));
     } finally {
@@ -345,7 +347,7 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
     <main className="pageShell">
       <VendorWorkspaceShell access={access}>
         <div className="workspacePageHeader">
-          <div><p className="eyebrow">Product</p><h1 className="pageTitle">{product.name}</h1><p className="muted">Store-scoped catalog record with normalized options, variants and media.</p></div>
+          <div><p className="eyebrow">Product</p><h1 className="pageTitle">{product.name}</h1><p className="muted">Store-scoped catalog record with normalized options, variants, media and physical shipping profiles.</p></div>
           <div className="sellerCardTopline"><VendorStatusPill status={product.status} /><VendorStatusPill status={product.moderationStatus} /></div>
         </div>
 
@@ -367,10 +369,10 @@ export function VendorProductEditor({ vendorId, productId }: Readonly<{ vendorId
           </form>
 
           <section className="panel sellerForm">
-            <div className="sectionHeadingCompact"><div><h2>Options & variants</h2><p>Options are fixed after initial product creation in the current API. New variants may use only existing option values.</p></div></div>
+            <div className="sectionHeadingCompact"><div><h2>Options, variants & shipping</h2><p>Each variant keeps its own SKU/price and physical shipping profile. GIGL quotes require a positive weight for every represented variant.</p></div></div>
             {product.options.length > 0 ? <div className="optionSnapshot">{product.options.map((option) => <div key={option.id}><strong>{option.name}</strong><span>{option.values.map((value) => value.value).join(", ")}</span></div>)}</div> : <p className="formMessage">This product uses one standard variant and no option dimensions.</p>}
             <div className="variantCreateTableWrap">
-              <table className="dataTable variantCreateTable"><thead><tr><th>Variant</th><th>SKU</th><th>NGN price</th><th>Status</th><th>Action</th></tr></thead><tbody>{product.variants.map((variant) => <VariantEditor key={variant.id} variant={variant} canUpdate={canUpdate} onSaved={() => void load()} />)}</tbody></table>
+              <table className="dataTable variantCreateTable"><thead><tr><th>Variant</th><th>SKU</th><th>NGN price</th><th>Status</th><th>Shipping</th><th>Action</th></tr></thead><tbody>{product.variants.map((variant) => <VariantEditor key={variant.id} variant={variant} canUpdate={canUpdate} onSaved={() => void load()} />)}</tbody></table>
             </div>
 
             {canUpdate && canAddVariant ? (

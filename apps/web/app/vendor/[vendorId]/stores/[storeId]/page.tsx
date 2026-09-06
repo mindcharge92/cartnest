@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AuthGuard } from "../../../../../components/auth-guard";
 import { ErrorState, LoadingState } from "../../../../../components/page-state";
+import { FulfillmentProfileEditor } from "../../../../../features/logistics/fulfillment-profile-editor";
 import { apiErrorMessage, vendorApi } from "../../../../../lib/api";
 import { hasVendorPermission } from "../../../../../features/vendor/permissions";
 import { useVendorAccess } from "../../../../../features/vendor/use-vendor-access";
@@ -125,28 +126,33 @@ function VendorStoreDetail() {
               <div>
                 <p className="eyebrow">Store settings</p>
                 <h1 className="pageTitle">{store.name}</h1>
-                <p className="muted">Manage this storefront's public identity and lifecycle.</p>
+                <p className="muted">Manage this storefront's public identity, lifecycle, and fulfillment configuration.</p>
               </div>
               <VendorStatusPill status={store.status} />
             </div>
 
-            <form className="panel sellerForm" onSubmit={save}>
-              <div className="formGrid formGridTwo">
-                <label className="field">Store name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={160} disabled={!canUpdate || busy} required /></label>
-                <label className="field">Store slug<input value={slug} onChange={(event) => setSlug(slugify(event.target.value))} minLength={2} maxLength={120} disabled={!canUpdate || busy} required /></label>
-              </div>
-              <label className="field">Description<textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} disabled={!canUpdate || busy} /></label>
-              {message ? <p className="formMessage" role="status">{message}</p> : null}
-              <div className="actionRow">
-                {canUpdate ? <button className="primaryButton" disabled={busy}>{busy ? "Saving…" : "Save store"}</button> : null}
-                {canUpdate && store.status === "DRAFT" ? (
-                  <button className="secondaryButton" type="button" disabled={busy || access.vendor.status !== "APPROVED"} onClick={() => void transition("activate")}>Activate store</button>
-                ) : null}
-                {canUpdate && store.status !== "CLOSED" ? <button className="dangerButton" type="button" disabled={busy} onClick={() => void transition("close")}>Close store</button> : null}
-                <Link className="secondaryButton" href={`/vendor/${encodeURIComponent(vendorId)}/stores`}>Back to stores</Link>
-              </div>
-              {store.status === "DRAFT" && access.vendor.status !== "APPROVED" ? <p className="fieldHint">Store activation is disabled in the UI until the vendor is APPROVED. The backend enforces the same rule.</p> : null}
-            </form>
+            <section className="productEditorStack">
+              <form className="panel sellerForm" onSubmit={save}>
+                <div className="sectionHeadingCompact"><div><h2>Store identity</h2><p>Public storefront identity and lifecycle settings.</p></div></div>
+                <div className="formGrid formGridTwo">
+                  <label className="field">Store name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={160} disabled={!canUpdate || busy} required /></label>
+                  <label className="field">Store slug<input value={slug} onChange={(event) => setSlug(slugify(event.target.value))} minLength={2} maxLength={120} disabled={!canUpdate || busy} required /></label>
+                </div>
+                <label className="field">Description<textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} disabled={!canUpdate || busy} /></label>
+                {message ? <p className="formMessage" role="status">{message}</p> : null}
+                <div className="actionRow">
+                  {canUpdate ? <button className="primaryButton" disabled={busy}>{busy ? "Saving…" : "Save store"}</button> : null}
+                  {canUpdate && store.status === "DRAFT" ? (
+                    <button className="secondaryButton" type="button" disabled={busy || access.vendor.status !== "APPROVED"} onClick={() => void transition("activate")}>Activate store</button>
+                  ) : null}
+                  {canUpdate && store.status !== "CLOSED" ? <button className="dangerButton" type="button" disabled={busy} onClick={() => void transition("close")}>Close store</button> : null}
+                  <Link className="secondaryButton" href={`/vendor/${encodeURIComponent(vendorId)}/stores`}>Back to stores</Link>
+                </div>
+                {store.status === "DRAFT" && access.vendor.status !== "APPROVED" ? <p className="fieldHint">Store activation is disabled in the UI until the vendor is APPROVED. The backend enforces the same rule.</p> : null}
+              </form>
+
+              <FulfillmentProfileEditor storeId={store.id} canUpdate={canUpdate} />
+            </section>
           </>
         ) : null}
       </VendorWorkspaceShell>

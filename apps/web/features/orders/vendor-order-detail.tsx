@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState } from "../../components/page-state";
 import { apiErrorCode, apiErrorMessage, ordersApi } from "../../lib/api";
 import { formatMoney } from "../catalog/catalog-utils";
+import { VendorShipmentManager } from "../logistics/shipment-tracking";
 import { hasVendorPermission } from "../vendor/permissions";
 import { useVendorAccess } from "../vendor/use-vendor-access";
 import { VendorWorkspaceShell } from "../vendor/vendor-workspace-shell";
@@ -32,6 +33,7 @@ export function VendorOrderDetail({
 
   const canRead = access ? hasVendorPermission(access, "order:read") : false;
   const canProcess = access ? hasVendorPermission(access, "order:process") : false;
+  const canFulfill = access ? hasVendorPermission(access, "order:fulfill") : false;
 
   const load = useCallback(async () => {
     if (!access || !canRead || !vendorOrderId) return;
@@ -88,7 +90,7 @@ export function VendorOrderDetail({
         {state === "error" || !order ? <ErrorState title="Vendor order unavailable" message={message ?? "CartNest could not load this vendor order."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} /> : null}
 
         {state === "ready" && order ? (
-          <div className="vendorOrderDetailPage">
+          <div className="vendorOrderDetailPage commerceStack">
             <div className="workspacePageHeader">
               <div>
                 <p className="eyebrow">{order.store.name} · {order.id.slice(0, 8).toUpperCase()}</p>
@@ -146,9 +148,11 @@ export function VendorOrderDetail({
                   </form>
                 ) : null}
 
-                {!canProcess ? <p className="fieldHint">Your membership can view orders but does not include order:process, so mutation controls are hidden.</p> : null}
+                {!canProcess ? <p className="fieldHint">Your membership can view orders but does not include order:process, so cancellation controls are hidden.</p> : null}
               </aside>
             </div>
+
+            <VendorShipmentManager order={order} canFulfill={canFulfill} onOrderChanged={load} />
           </div>
         ) : null}
       </VendorWorkspaceShell>
