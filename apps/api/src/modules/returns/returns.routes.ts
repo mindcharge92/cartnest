@@ -1,6 +1,6 @@
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
-import { Type } from "typebox";
 import {
+  AdminReviewListQuerySchema,
   ApiErrorSchema,
   CreateProductReviewBodySchema,
   CreateRefundBodySchema,
@@ -10,7 +10,10 @@ import {
   ProductReviewParamsSchema,
   RefundHeadersSchema,
   RefundIdParamsSchema,
+  RefundListQuerySchema,
+  RefundListResponseSchema,
   RefundSchema,
+  RestockReturnResponseSchema,
   ReturnIdParamsSchema,
   ReturnListQuerySchema,
   ReturnListResponseSchema,
@@ -85,12 +88,20 @@ export function registerReturnsRoutes(app: FastifyInstance, options: ReturnsRout
     try { requireCsrfToken(request); const principal = await requireAccessPrincipal(request, authOrThrow(options.authService)); return reply.send(await serviceOrThrow(options.service).updateReturnStatus(principal, request.params.returnRequestId, request.body)); } catch (error) { return sendError(request, reply, error); }
   });
 
-  server.post("/api/v1/returns/:returnRequestId/restock", { schema: { tags: ["returns"], operationId: "restockReturnedItems", params: ReturnIdParamsSchema, response: { 200: Type.Object({ adjustedItems: Type.Integer({ minimum: 0 }) }), ...commonErrors } } }, async (request, reply) => {
+  server.post("/api/v1/returns/:returnRequestId/restock", { schema: { tags: ["returns"], operationId: "restockReturnedItems", params: ReturnIdParamsSchema, response: { 200: RestockReturnResponseSchema, ...commonErrors } } }, async (request, reply) => {
     try { requireCsrfToken(request); const principal = await requireAccessPrincipal(request, authOrThrow(options.authService)); return reply.send(await serviceOrThrow(options.service).restockReturn(principal, request.params.returnRequestId)); } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.get("/api/v1/vendor-orders/:vendorOrderId/refunds", { schema: { tags: ["refunds"], operationId: "listVendorOrderRefunds", params: VendorOrderRefundParamsSchema, querystring: RefundListQuerySchema, response: { 200: RefundListResponseSchema, ...commonErrors } } }, async (request, reply) => {
+    try { const principal = await requireAccessPrincipal(request, authOrThrow(options.authService)); return reply.send(await serviceOrThrow(options.service).listVendorOrderRefunds(principal, request.params.vendorOrderId, request.query)); } catch (error) { return sendError(request, reply, error); }
   });
 
   server.post("/api/v1/vendor-orders/:vendorOrderId/refunds", { schema: { tags: ["refunds"], operationId: "requestVendorRefund", params: VendorOrderRefundParamsSchema, headers: RefundHeadersSchema, body: CreateRefundBodySchema, response: { 201: RefundSchema, ...commonErrors } } }, async (request, reply) => {
     try { requireCsrfToken(request); const principal = await requireAccessPrincipal(request, authOrThrow(options.authService)); return reply.code(201).send(await serviceOrThrow(options.service).requestRefund(principal, request.params.vendorOrderId, request.body, request.headers["idempotency-key"])); } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.get("/api/v1/admin/refunds", { schema: { tags: ["admin", "refunds"], operationId: "listAdminRefunds", querystring: RefundListQuerySchema, response: { 200: RefundListResponseSchema, ...commonErrors } } }, async (request, reply) => {
+    try { await adminPrincipal(request, options); return reply.send(await serviceOrThrow(options.service).listAdminRefunds(request.query)); } catch (error) { return sendError(request, reply, error); }
   });
 
   server.post("/api/v1/admin/refunds/:refundId/approve", { schema: { tags: ["admin", "refunds"], operationId: "approveAndExecuteRefund", params: RefundIdParamsSchema, response: { 200: RefundSchema, ...commonErrors } } }, async (request, reply) => {
@@ -115,6 +126,10 @@ export function registerReturnsRoutes(app: FastifyInstance, options: ReturnsRout
 
   server.get("/api/v1/stores/:storeId/reviews", { schema: { tags: ["reviews"], operationId: "listStoreReviews", params: StoreReviewParamsSchema, querystring: PaginationQuerySchema, response: { 200: ReviewListResponseSchema, ...commonErrors } } }, async (request, reply) => {
     try { return reply.send(await serviceOrThrow(options.service).listStoreReviews(request.params.storeId, request.query.page ?? 1, request.query.pageSize ?? 20)); } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.get("/api/v1/admin/reviews", { schema: { tags: ["admin", "reviews"], operationId: "listAdminReviews", querystring: AdminReviewListQuerySchema, response: { 200: ReviewListResponseSchema, ...commonErrors } } }, async (request, reply) => {
+    try { await adminPrincipal(request, options); return reply.send(await serviceOrThrow(options.service).listAdminReviews(request.query)); } catch (error) { return sendError(request, reply, error); }
   });
 
   server.post("/api/v1/admin/reviews/:reviewId/moderate", { schema: { tags: ["admin", "reviews"], operationId: "moderateReview", params: ReviewIdParamsSchema, body: ReviewModerationBodySchema, response: { 200: ReviewSchema, ...commonErrors } } }, async (request, reply) => {
