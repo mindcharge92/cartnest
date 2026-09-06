@@ -182,18 +182,21 @@ export function VendorShipmentManager({
   const [trackingNumber, setTrackingNumber] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     setMessage(null);
     setSuccess(false);
     try {
       const response = await logisticsApi.listVendorOrderShipments(order.id);
       setShipments(response.items);
     } catch (caught) {
+      setLoadFailed(true);
       setMessage(apiErrorMessage(caught, "CartNest could not load shipments for this vendor order."));
     } finally {
       setLoading(false);
@@ -215,7 +218,7 @@ export function VendorShipmentManager({
   }, [order.items, shipments]);
   const unitsRemaining = [...remaining.values()].reduce((sum, quantity) => sum + quantity, 0);
   const orderCanShip = order.paymentStatus === "SUCCEEDED" && !["CANCELLED", "REFUNDED"].includes(order.status);
-  const canCreateShipment = canFulfill && orderCanShip && unitsRemaining > 0;
+  const canCreateShipment = canFulfill && orderCanShip && unitsRemaining > 0 && !loading && !loadFailed;
 
   async function createShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -277,6 +280,7 @@ export function VendorShipmentManager({
       </div>
 
       {message ? <p className={success ? "formMessage formMessageSuccess" : "formMessage formMessageError"} role="status">{message}</p> : null}
+      {loadFailed ? <p className="fieldHint">Shipment mutations are disabled until the authoritative shipment list can be loaded.</p> : null}
 
       {canCreateShipment ? (
         <form className="panel sellerForm" onSubmit={createShipment}>
@@ -302,12 +306,12 @@ export function VendorShipmentManager({
       ) : null}
 
       {!canFulfill ? <p className="formMessage">Your membership can view shipment tracking but does not include order:fulfill.</p> : null}
-      {canFulfill && order.paymentStatus !== "SUCCEEDED" ? <p className="formMessage">Shipment creation unlocks only after the parent payment is verified as successful.</p> : null}
-      {canFulfill && order.paymentStatus === "SUCCEEDED" && ["CANCELLED", "REFUNDED"].includes(order.status) ? <p className="formMessage">This cancelled or refunded vendor order cannot be fulfilled.</p> : null}
-      {canFulfill && orderCanShip && unitsRemaining === 0 && order.items.length > 0 ? <p className="formMessage formMessageSuccess">All ordered units are allocated to active shipments.</p> : null}
+      {canFulfill && !loadFailed && order.paymentStatus !== "SUCCEEDED" ? <p className="formMessage">Shipment creation unlocks only after the parent payment is verified as successful.</p> : null}
+      {canFulfill && !loadFailed && order.paymentStatus === "SUCCEEDED" && ["CANCELLED", "REFUNDED"].includes(order.status) ? <p className="formMessage">This cancelled or refunded vendor order cannot be fulfilled.</p> : null}
+      {canFulfill && !loadFailed && orderCanShip && unitsRemaining === 0 && order.items.length > 0 ? <p className="formMessage formMessageSuccess">All ordered units are allocated to active shipments.</p> : null}
       {loading && shipments.length === 0 ? <p className="formMessage">Loading shipments…</p> : null}
-      {!loading && shipments.length === 0 ? <p className="formMessage">No shipment has been created for this store order yet.</p> : null}
-      {shipments.map((shipment) => <ShipmentCard key={shipment.id} shipment={shipment} itemNames={names} canUpdateManual={canFulfill} onUpdated={shipmentUpdated} />)}
+      {!loading && !loadFailed && shipments.length === 0 ? <p className="formMessage">No shipment has been created for this store order yet.</p> : null}
+      {shipments.map((shipment) => <ShipmentCard key={shipment.id} shipment={shipment} itemNames={names} canUpdateManual={canFulfill && !loadFailed} onUpdated={shipmentUpdated} />)}
     </section>
   );
 }
