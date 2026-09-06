@@ -26,6 +26,11 @@ export class PrivacyError extends Error {
   }
 }
 
+type PrivacyReadClient = Pick<
+  DatabaseClient,
+  "user" | "vendorMember" | "order" | "returnRequest" | "refund"
+>;
+
 function mapRequest(record: {
   id: string;
   status: "PENDING" | "REQUIRES_REVIEW" | "COMPLETED" | "REJECTED";
@@ -77,6 +82,15 @@ function pagination(page: number, pageSize: number, totalItems: number) {
   };
 }
 
+function isTransactionConflict(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2034",
+  );
+}
+
 export class PrivacyService {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -85,22 +99,25 @@ export class PrivacyService {
     requirePrivilegedMfa(principal);
   }
 
-  private async erasureBlockers(userId: string): Promise<string[]> {
+  private async erasureBlockers(
+    userId: string,
+    database: PrivacyReadClient = this.database,
+  ): Promise<string[]> {
     const [user, ownerMemberships, openOrders, openReturns, openRefunds] = await Promise.all([
-      this.database.user.findUnique({
+      database.user.findUnique({
         where: { id: userId },
         select: { platformRole: true },
       }),
-      this.database.vendorMember.count({
+      database.vendorMember.count({
         where: { userId, role: "OWNER", status: "ACTIVE" },
       }),
-      this.database.order.count({
+      database.order.count({
         where: {
           userId,
           status: { in: ["PENDING_PAYMENT", "PAID", "PARTIALLY_FULFILLED"] },
         },
       }),
-      this.database.returnRequest.count({
+      database.returnRequest.count({
         where: {
           userId,
           status: {
@@ -116,7 +133,7 @@ export class PrivacyService {
           },
         },
       }),
-      this.database.refund.count({
+      database.refund.count({
         where: {
           requestedBy: userId,
           status: { in: ["REQUESTED", "APPROVED", "PROCESSING"] },
@@ -303,7 +320,11 @@ export class PrivacyService {
     if (body.decision === "REJECT") {
       const rejected = await this.database.$transaction(async (tx) => {
         const changed = await tx.privacyRequest.updateMany({
-          where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
+          where: {
+            id: request.id,
+            status: { in: ["PENDING", "REQUIRES_REVIEW"] },
+            reviewNote: request.reviewNote,
+          },
           data: {
             status: "REJECTED",
             reviewNote: body.reason,
@@ -333,112 +354,148 @@ export class PrivacyService {
       return mapRequest(rejected);
     }
 
-    const blockers = await this.erasureBlockers(request.userId);
-    if (blockers.length > 0) {
-      await this.database.privacyRequest.updateMany({
-        where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
-        data: {
-          status: "REQUIRES_REVIEW",
-          reviewNote: `Cannot anonymize yet: ${blockers.join(", ")}. ${body.reason}`,
-        },
-      });
-      throw new PrivacyError(
-        "PRIVACY_ERASURE_BLOCKED",
-        "Account cannot be anonymized while protected business or fulfillment obligations remain active.",
-        409,
-      );
-    }
+    try {
+      const outcome = await this.database.$transaction(async (tx) => {
+        const current = await tx.privacyRequest.findUnique({ where: { id: privacyRequestId } });
+        if (!current) throw new PrivacyError("PRIVACY_REQUEST_NOT_FOUND", "Privacy request was not found.", 404);
+        if (["COMPLETED", "REJECTED"].includes(current.status)) {
+          throw new PrivacyError("PRIVACY_REQUEST_FINAL", "Privacy request has already reached a final state.", 409);
+        }
 
-    const returnRows = await this.database.returnRequest.findMany({
-      where: { userId: request.userId },
-      select: { id: true },
-    });
-    const returnIds = returnRows.map((row) => row.id);
-    const now = new Date();
+        const blockers = await this.erasureBlockers(current.userId, tx);
+        if (blockers.length > 0) {
+          const changed = await tx.privacyRequest.updateMany({
+            where: {
+              id: current.id,
+              status: { in: ["PENDING", "REQUIRES_REVIEW"] },
+              reviewNote: current.reviewNote,
+            },
+            data: {
+              status: "REQUIRES_REVIEW",
+              reviewNote: `Cannot anonymize yet: ${blockers.join(", ")}. ${body.reason}`,
+            },
+          });
+          if (changed.count !== 1) {
+            throw new PrivacyError(
+              "PRIVACY_REQUEST_STATE_CONFLICT",
+              "Privacy request state changed while blockers were being reviewed. Refresh and try again.",
+              409,
+            );
+          }
+          return { kind: "blocked" as const };
+        }
 
-    const completed = await this.database.$transaction(async (tx) => {
-      const claimed = await tx.privacyRequest.updateMany({
-        where: { id: request.id, status: { in: ["PENDING", "REQUIRES_REVIEW"] } },
-        data: { reviewNote: `Anonymization approved and processing. ${body.reason}` },
-      });
-      if (claimed.count !== 1) {
+        const claimed = await tx.privacyRequest.updateMany({
+          where: {
+            id: current.id,
+            status: { in: ["PENDING", "REQUIRES_REVIEW"] },
+            reviewNote: current.reviewNote,
+          },
+          data: { reviewNote: `Anonymization approved and processing. ${body.reason}` },
+        });
+        if (claimed.count !== 1) {
+          throw new PrivacyError(
+            "PRIVACY_REQUEST_STATE_CONFLICT",
+            "Privacy request state changed before anonymization could begin. Refresh and try again.",
+            409,
+          );
+        }
+
+        const returnRows = await tx.returnRequest.findMany({
+          where: { userId: current.userId },
+          select: { id: true },
+        });
+        const returnIds = returnRows.map((row) => row.id);
+        const now = new Date();
+
+        await tx.authIdentity.deleteMany({ where: { userId: current.userId } });
+        await tx.authSession.deleteMany({ where: { userId: current.userId } });
+        await tx.mfaFactor.deleteMany({ where: { userId: current.userId } });
+        await tx.address.deleteMany({ where: { userId: current.userId } });
+        await tx.wishlist.deleteMany({ where: { userId: current.userId } });
+        await tx.cart.deleteMany({ where: { userId: current.userId } });
+        await tx.notificationReceipt.deleteMany({ where: { userId: current.userId } });
+        await tx.notificationPreference.deleteMany({ where: { userId: current.userId } });
+        await tx.notification.updateMany({
+          where: { userId: current.userId },
+          data: {
+            userId: null,
+            recipient: "redacted",
+            payload: { redacted: true },
+            lastError: null,
+          },
+        });
+        await tx.productReview.updateMany({ where: { userId: current.userId }, data: { text: null } });
+        await tx.storeReview.updateMany({ where: { userId: current.userId }, data: { text: null } });
+        await tx.returnRequest.updateMany({
+          where: { userId: current.userId },
+          data: { reason: "Redacted after approved account-erasure request." },
+        });
+        if (returnIds.length > 0) {
+          await tx.returnItem.updateMany({
+            where: { returnRequestId: { in: returnIds } },
+            data: { reason: null },
+          });
+        }
+        await tx.order.updateMany({
+          where: { userId: current.userId },
+          data: { deliveryAddressSnapshot: { redacted: true } },
+        });
+        await tx.vendorMember.updateMany({
+          where: { userId: current.userId, role: "STAFF", status: { in: ["INVITED", "ACTIVE", "SUSPENDED"] } },
+          data: { status: "REMOVED" },
+        });
+        await tx.user.update({
+          where: { id: current.userId },
+          data: {
+            email: null,
+            normalizedEmail: null,
+            phone: null,
+            normalizedPhone: null,
+            passwordHash: null,
+            emailVerifiedAt: null,
+            phoneVerifiedAt: null,
+            platformRole: "USER",
+            status: "DISABLED",
+          },
+        });
+        const updated = await tx.privacyRequest.update({
+          where: { id: current.id },
+          data: {
+            status: "COMPLETED",
+            reviewNote: body.reason,
+            processedAt: now,
+            processedBy: principal.userId,
+          },
+        });
+        await writeAuditEntry(tx, {
+          actorType: "USER",
+          actorUserId: principal.userId,
+          action: "privacy.erasure.completed",
+          entityType: "PrivacyRequest",
+          entityId: current.id,
+          metadata: { subjectUserId: current.userId, reason: body.reason },
+        });
+        return { kind: "completed" as const, request: updated };
+      }, { isolationLevel: "Serializable" });
+
+      if (outcome.kind === "blocked") {
         throw new PrivacyError(
-          "PRIVACY_REQUEST_STATE_CONFLICT",
-          "Privacy request state changed before anonymization could begin. Refresh and try again.",
+          "PRIVACY_ERASURE_BLOCKED",
+          "Account cannot be anonymized while protected business or fulfillment obligations remain active.",
           409,
         );
       }
-      await tx.authIdentity.deleteMany({ where: { userId: request.userId } });
-      await tx.authSession.deleteMany({ where: { userId: request.userId } });
-      await tx.mfaFactor.deleteMany({ where: { userId: request.userId } });
-      await tx.address.deleteMany({ where: { userId: request.userId } });
-      await tx.wishlist.deleteMany({ where: { userId: request.userId } });
-      await tx.cart.deleteMany({ where: { userId: request.userId } });
-      await tx.notificationReceipt.deleteMany({ where: { userId: request.userId } });
-      await tx.notificationPreference.deleteMany({ where: { userId: request.userId } });
-      await tx.notification.updateMany({
-        where: { userId: request.userId },
-        data: {
-          userId: null,
-          recipient: "redacted",
-          payload: { redacted: true },
-          lastError: null,
-        },
-      });
-      await tx.productReview.updateMany({ where: { userId: request.userId }, data: { text: null } });
-      await tx.storeReview.updateMany({ where: { userId: request.userId }, data: { text: null } });
-      await tx.returnRequest.updateMany({
-        where: { userId: request.userId },
-        data: { reason: "Redacted after approved account-erasure request." },
-      });
-      if (returnIds.length > 0) {
-        await tx.returnItem.updateMany({
-          where: { returnRequestId: { in: returnIds } },
-          data: { reason: null },
-        });
+      return mapRequest(outcome.request);
+    } catch (error) {
+      if (isTransactionConflict(error)) {
+        throw new PrivacyError(
+          "PRIVACY_REQUEST_STATE_CONFLICT",
+          "Privacy request or protected account obligations changed during processing. Refresh and try again.",
+          409,
+        );
       }
-      await tx.order.updateMany({
-        where: { userId: request.userId },
-        data: { deliveryAddressSnapshot: { redacted: true } },
-      });
-      await tx.vendorMember.updateMany({
-        where: { userId: request.userId, role: "STAFF", status: { in: ["INVITED", "ACTIVE", "SUSPENDED"] } },
-        data: { status: "REMOVED" },
-      });
-      await tx.user.update({
-        where: { id: request.userId },
-        data: {
-          email: null,
-          normalizedEmail: null,
-          phone: null,
-          normalizedPhone: null,
-          passwordHash: null,
-          emailVerifiedAt: null,
-          phoneVerifiedAt: null,
-          platformRole: "USER",
-          status: "DISABLED",
-        },
-      });
-      const updated = await tx.privacyRequest.update({
-        where: { id: request.id },
-        data: {
-          status: "COMPLETED",
-          reviewNote: body.reason,
-          processedAt: now,
-          processedBy: principal.userId,
-        },
-      });
-      await writeAuditEntry(tx, {
-        actorType: "USER",
-        actorUserId: principal.userId,
-        action: "privacy.erasure.completed",
-        entityType: "PrivacyRequest",
-        entityId: request.id,
-        metadata: { subjectUserId: request.userId, reason: body.reason },
-      });
-      return updated;
-    });
-
-    return mapRequest(completed);
+      throw error;
+    }
   }
 }
