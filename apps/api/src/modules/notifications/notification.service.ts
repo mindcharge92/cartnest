@@ -426,6 +426,7 @@ export class NotificationService {
       const changed = await tx.notification.updateMany({
         where: {
           id: notificationId,
+          updatedAt: notification.updatedAt,
           channel: { not: "IN_APP" },
           status: { in: ["FAILED", "QUEUED"] },
         },
