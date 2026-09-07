@@ -49,7 +49,7 @@ export function createContractRequestClient(options: ContractRequestClientOption
     async request<TResponse>(path: string, requestOptions: ContractRequestOptions = {}): Promise<TResponse> {
       const { body, headers: inputHeaders, ...rest } = requestOptions;
       const headers = new Headers(inputHeaders);
-      let encodedBody: BodyInit | undefined;
+      let encodedBody: string | undefined;
 
       if (body !== undefined) {
         if (!headers.has("content-type")) headers.set("content-type", "application/json");
