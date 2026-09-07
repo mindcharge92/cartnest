@@ -146,13 +146,10 @@ export class OutboxDispatcher {
     }
 
     const subscriptions = queueSubscriptions(event.eventType);
-    if (subscriptions.length === 0) {
-      await this.markPermanentFailure(event, `UNSUPPORTED_EVENT_TYPE:${event.eventType}`);
-      return "failed";
-    }
-
     const envelope = this.envelope(event);
     try {
+      // Domain facts may legitimately have no asynchronous subscriber yet.
+      // They are still a valid outbox event, so zero subscribers is not a dead letter.
       for (const queueKey of subscriptions) {
         await this.queues[queueKey].add(event.eventType, envelope, defaultEventJobOptions(envelope));
       }
