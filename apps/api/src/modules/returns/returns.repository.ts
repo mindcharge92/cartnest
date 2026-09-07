@@ -636,7 +636,7 @@ export class PrismaReturnsRepository {
         },
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new Error("REVIEW_ALREADY_EXISTS");
+      if (isUniqueViolation(error)) throw new Error("REVIEW_ALREADY_EXISTS", { cause: error });
       throw error;
     }
   }
@@ -657,7 +657,7 @@ export class PrismaReturnsRepository {
         },
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new Error("REVIEW_ALREADY_EXISTS");
+      if (isUniqueViolation(error)) throw new Error("REVIEW_ALREADY_EXISTS", { cause: error });
       throw error;
     }
   }
