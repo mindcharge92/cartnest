@@ -3,7 +3,6 @@ import {
   AdminListQuerySchema,
   AdminOrderListResponseSchema,
   AdminPaymentListResponseSchema,
-  AdminRefundListResponseSchema,
   AdminUserListResponseSchema,
   AnalyticsRangeQuerySchema,
   ApiErrorSchema,
@@ -115,14 +114,8 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
     } catch (error) { return sendError(request, reply, error); }
   });
 
-  server.get("/api/v1/admin/refunds", {
-    schema: { tags: ["admin"], operationId: "listAdminRefunds", querystring: AdminListQuerySchema, response: { 200: AdminRefundListResponseSchema, ...commonErrors } },
-  }, async (request, reply) => {
-    try {
-      const principal = await requireAccessPrincipal(request, authServiceOrThrow(options.authService));
-      return reply.send(await adminServiceOrThrow(options.service).listRefunds(principal, request.query));
-    } catch (error) { return sendError(request, reply, error); }
-  });
+  // Refund listing and lifecycle administration are registered by the returns/refunds
+  // module so the richer status-filtered refund contract has one authoritative route.
 
   server.get("/api/v1/admin/tax-rates", {
     schema: { tags: ["admin"], operationId: "listTaxRates", response: { 200: TaxRateListResponseSchema, ...commonErrors } },
