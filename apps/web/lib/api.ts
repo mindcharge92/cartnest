@@ -1,6 +1,7 @@
 import {
   CartNestApiError,
   createAdminApi,
+  createAuthApi,
   createCartApi,
   createCartNestApiClient,
   createCatalogApi,
@@ -39,6 +40,7 @@ const browserFetch: typeof globalThis.fetch = async (input, init) => {
 
 export const api = createCartNestApiClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
 const contractApi = createContractRequestClient({ baseUrl: API_BASE_URL, fetch: browserFetch });
+export const authApi = createAuthApi(contractApi);
 export const vendorApi = createVendorApi(contractApi);
 export const catalogApi = createCatalogApi(contractApi);
 export const inventoryApi = createInventoryApi(contractApi);
@@ -68,4 +70,8 @@ export function apiErrorCode(error: unknown): string | undefined {
     return typeof envelope?.code === "string" ? envelope.code : undefined;
   }
   return undefined;
+}
+
+export function apiErrorStatus(error: unknown): number | undefined {
+  return error instanceof CartNestApiError ? error.status : undefined;
 }
