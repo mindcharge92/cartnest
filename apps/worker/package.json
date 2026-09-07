@@ -11,7 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/config": "workspace:*"
+    "@repo/config": "workspace:*",
+    "@repo/database": "workspace:*",
+    "bullmq": "6.3.4"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
