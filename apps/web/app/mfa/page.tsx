@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AuthGuard } from "../../components/auth-guard";
 import { useSession } from "../../components/session-provider";
-import { api, apiErrorMessage } from "../../lib/api";
+import { apiErrorMessage, authApi } from "../../lib/api";
 
 function MfaPanel() {
   const { session, adoptSession, reloadSession } = useSession();
@@ -20,31 +20,34 @@ function MfaPanel() {
   async function begin() {
     setBusy("begin"); setMessage(null); setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/mfa/totp/enroll", {});
-      if (!result.data) return setError(apiErrorMessage(result.error, "Could not start MFA enrollment."));
-      setSecret(result.data.secret);
-      setUri(result.data.otpauthUri);
+      const enrollment = await authApi.beginTotpEnrollment();
+      setSecret(enrollment.secret);
+      setUri(enrollment.otpauthUri);
       setMessage("Add this secret to your authenticator app, then enter the current six-digit code.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "Could not start MFA enrollment."));
     } finally { setBusy(null); }
   }
 
   async function confirm() {
     setBusy("confirm"); setMessage(null); setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/mfa/totp/confirm", { body: { code } });
-      if (!result.data) return setError(apiErrorMessage(result.error, "Enrollment confirmation failed."));
+      await authApi.confirmTotpEnrollment({ code });
       setMessage("MFA is enrolled. Verify one current code to satisfy this privileged session.");
       await reloadSession();
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "Enrollment confirmation failed."));
     } finally { setBusy(null); }
   }
 
   async function challenge() {
     setBusy("challenge"); setMessage(null); setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/mfa/challenge", { body: { code } });
-      if (!result.data) return setError(apiErrorMessage(result.error, "MFA challenge failed."));
-      adoptSession(result.data);
+      const nextSession = await authApi.challengeTotp({ code });
+      adoptSession(nextSession);
       setMessage("MFA verified for this privileged session.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "MFA challenge failed."));
     } finally { setBusy(null); }
   }
 
