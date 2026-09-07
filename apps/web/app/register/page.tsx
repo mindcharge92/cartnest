@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
-import { API_BASE_URL, api, apiErrorMessage } from "../../lib/api";
+import { API_BASE_URL, apiErrorMessage, authApi } from "../../lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,21 +25,15 @@ export default function RegisterPage() {
 
     setBusy(true);
     try {
-      const result = await api.POST("/api/v1/auth/register", {
-        body: {
-          ...(email.trim() ? { email: email.trim() } : {}),
-          ...(phone.trim() ? { phone: phone.trim() } : {}),
-          password,
-        },
+      const session = await authApi.register({
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+        password,
       });
-      if (!result.data) {
-        setMessage(apiErrorMessage(result.error, "Unable to create account."));
-        return;
-      }
-      adoptSession(result.data);
-      router.replace(result.data.mfa.required && !result.data.mfa.satisfied ? "/mfa" : "/account");
-    } catch {
-      setMessage("CartNest could not reach the registration service. Try again.");
+      adoptSession(session);
+      router.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : "/account");
+    } catch (caught) {
+      setMessage(apiErrorMessage(caught, "CartNest could not reach the registration service. Try again."));
     } finally {
       setBusy(false);
     }
