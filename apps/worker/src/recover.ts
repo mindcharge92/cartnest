@@ -1,5 +1,5 @@
 import { getWorkerEnvironment } from "@repo/config/worker";
-import { createDatabaseClient } from "@repo/database";
+import { createDatabaseClient, writeAuditEntry } from "@repo/database";
 import { buildDurableEventEnvelope } from "./outbox.js";
 import {
   closeQueueRegistry,
@@ -10,6 +10,7 @@ import {
 import { SUPPORTED_EVENT_VERSION } from "./types.js";
 
 const CONFIRMATION = "REBUILD_IDEMPOTENT_NOTIFICATION_JOBS";
+const MAX_SCAN = 10_000;
 
 function usage(): never {
   throw new Error(
@@ -39,9 +40,15 @@ try {
       publishedAt: { gte: since },
       eventVersion: SUPPORTED_EVENT_VERSION,
     },
-    orderBy: { createdAt: "asc" },
-    take: 10_000,
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: MAX_SCAN + 1,
   });
+
+  if (events.length > MAX_SCAN) {
+    throw new Error(
+      `REDIS_RECOVERY_WINDOW_TOO_LARGE: more than ${MAX_SCAN} published events matched. Narrow WORKER_REDIS_RECOVERY_SINCE and run reviewed batches.`,
+    );
+  }
 
   let considered = 0;
   let enqueued = 0;
@@ -70,9 +77,28 @@ try {
     }
   }
 
+  const recordedAt = new Date();
+  await database.$transaction(async (tx) => {
+    await writeAuditEntry(tx, {
+      actorType: "SYSTEM",
+      action: "outbox.redis_recovery.rebuilt",
+      entityType: "OutboxRecovery",
+      entityId: recordedAt.toISOString(),
+      metadata: {
+        since: since.toISOString(),
+        scannedPublishedEvents: events.length,
+        considered,
+        enqueued,
+        skipped,
+        subscriberScope: "notifications-only",
+      },
+    });
+  });
+
   console.info(JSON.stringify({
     status: "redis-recovery-jobs-rebuilt",
     since: since.toISOString(),
+    recordedAt: recordedAt.toISOString(),
     scannedPublishedEvents: events.length,
     considered,
     enqueued,
