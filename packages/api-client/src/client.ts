@@ -10,7 +10,7 @@ export interface CartNestApiClientOptions {
 export function createCartNestApiClient(options: CartNestApiClientOptions) {
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
-    fetch: options.fetch,
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
     credentials: "include",
   });
 
