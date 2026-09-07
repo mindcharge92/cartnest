@@ -5,7 +5,7 @@
   "description": "CartNest multi-vendor e-commerce marketplace monorepo",
   "packageManager": "pnpm@11.25.0",
   "engines": {
-    "node": ">=24.20.0 <25",
+    "node": ">=24.20.0 <26",
     "pnpm": "11.25.0"
   },
   "scripts": {
