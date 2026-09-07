@@ -29,13 +29,15 @@ export function redisConnectionOptions(redisUrl: string) {
   const dbText = url.pathname.replace(/^\//, "");
   const db = dbText ? Number.parseInt(dbText, 10) : 0;
   if (!Number.isInteger(db) || db < 0) throw new Error("REDIS_URL database index is invalid.");
+  const username = url.username ? decodeURIComponent(url.username) : undefined;
+  const password = url.password ? decodeURIComponent(url.password) : undefined;
   return {
     host: url.hostname,
     port: url.port ? Number.parseInt(url.port, 10) : 6379,
-    username: url.username ? decodeURIComponent(url.username) : undefined,
-    password: url.password ? decodeURIComponent(url.password) : undefined,
     db,
     maxRetriesPerRequest: null,
+    ...(username ? { username } : {}),
+    ...(password ? { password } : {}),
     ...(url.protocol === "rediss:" ? { tls: {} } : {}),
   };
 }
