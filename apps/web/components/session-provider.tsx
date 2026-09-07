@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api } from "../lib/api";
+import { apiErrorMessage, apiErrorStatus, authApi } from "../lib/api";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated" | "error";
 
@@ -42,36 +42,36 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
     setError(null);
 
     try {
-      const first = await api.GET("/api/v1/auth/session");
-      if (first.data) {
-        adoptSession(first.data);
+      const current = await authApi.getSession();
+      adoptSession(current);
+      return;
+    } catch (caught) {
+      if (apiErrorStatus(caught) !== 401) {
+        setError(apiErrorMessage(caught, "CartNest could not verify your session right now."));
+        setStatus("error");
         return;
       }
+    }
 
-      if (first.response.status === 401) {
-        const refreshed = await api.POST("/api/v1/auth/refresh", {});
-        if (refreshed.data) {
-          adoptSession(refreshed.data);
-          return;
-        }
-        if (refreshed.response.status === 401 || refreshed.response.status === 403) {
-          setSession(null);
-          setStatus("unauthenticated");
-          return;
-        }
+    try {
+      const refreshed = await authApi.refresh();
+      adoptSession(refreshed);
+    } catch (caught) {
+      const statusCode = apiErrorStatus(caught);
+      if (statusCode === 401 || statusCode === 403) {
+        setSession(null);
+        setError(null);
+        setStatus("unauthenticated");
+        return;
       }
-
-      setError("CartNest could not verify your session right now.");
-      setStatus("error");
-    } catch {
-      setError("CartNest could not reach the session service.");
+      setError(apiErrorMessage(caught, "CartNest could not reach the session service."));
       setStatus("error");
     }
   }, [adoptSession]);
 
   const logout = useCallback(async () => {
     try {
-      await api.POST("/api/v1/auth/logout", {});
+      await authApi.logout();
     } finally {
       setSession(null);
       setError(null);
@@ -81,8 +81,7 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
 
   const logoutAll = useCallback(async () => {
     try {
-      const result = await api.POST("/api/v1/auth/logout-all", {});
-      if (!result.data) return false;
+      await authApi.logoutAll();
       setSession(null);
       setError(null);
       setStatus("unauthenticated");
