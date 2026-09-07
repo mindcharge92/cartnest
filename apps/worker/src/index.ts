@@ -1,10 +1,12 @@
 import { getWorkerEnvironment } from "@repo/config/worker";
 import { createDatabaseClient } from "@repo/database";
+import type { Job } from "bullmq";
 import { getWorkerHealth, recordOutboxRun, recordWorkerFailure } from "./health.js";
 import { OutboxDispatcher } from "./outbox.js";
 import { closeWorkerConsumers, createWorkerConsumers } from "./processors.js";
 import { closeQueueRegistry, createQueueRegistry } from "./queues.js";
 import { startWorkerScheduler } from "./scheduler.js";
+import type { BackgroundJobData } from "./types.js";
 
 const environment = getWorkerEnvironment();
 const database = createDatabaseClient({ connectionString: environment.databaseUrl });
@@ -26,7 +28,7 @@ function logError(message: string, error: unknown): void {
 }
 
 for (const [queueName, worker] of Object.entries(consumers)) {
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job: Job<BackgroundJobData> | undefined, error: Error) => {
     logError("CartNest background job failed", error);
     console.error(JSON.stringify({
       level: "error",
@@ -37,7 +39,9 @@ for (const [queueName, worker] of Object.entries(consumers)) {
       attemptsMade: job?.attemptsMade ?? null,
     }));
   });
-  worker.on("error", (error) => logError(`CartNest ${queueName} worker connection/runtime error`, error));
+  worker.on("error", (error: Error) =>
+    logError(`CartNest ${queueName} worker connection/runtime error`, error),
+  );
 }
 
 const scheduler = startWorkerScheduler(
