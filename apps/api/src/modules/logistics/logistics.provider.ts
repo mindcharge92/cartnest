@@ -189,12 +189,14 @@ export class GiglAdapter implements LogisticsProviderAdapter {
     const data = response && typeof response === "object" && "Object" in response ? (response as { Object?: unknown }).Object : response;
     const amountNaira = firstNumber(data, ["GrandTotal", "Total", "Price", "Amount", "ShippingCost"]);
     if (amountNaira === null || amountNaira < 0) throw new Error("GIGL_QUOTE_UNMAPPABLE");
+    const serviceCode = firstString(data, ["ServiceCode", "DeliveryOption", "VehicleType"]);
+    const providerQuoteReference = firstString(data, ["QuoteReference", "Reference", "RequestId"]);
     return {
       provider: "GIGL",
       amountMinor: BigInt(Math.round(amountNaira * 100)),
       currency: input.currency,
-      serviceCode: firstString(data, ["ServiceCode", "DeliveryOption", "VehicleType"]),
-      providerQuoteReference: firstString(data, ["QuoteReference", "Reference", "RequestId"]),
+      ...(serviceCode !== undefined ? { serviceCode } : {}),
+      ...(providerQuoteReference !== undefined ? { providerQuoteReference } : {}),
       metadata: { raw: jsonSafe(data) },
     };
   }
@@ -208,12 +210,14 @@ export class GiglAdapter implements LogisticsProviderAdapter {
     const data = response && typeof response === "object" && "Object" in response ? (response as { Object?: unknown }).Object : response;
     const latest = Array.isArray(data) ? data.at(-1) : data;
     const code = firstString(latest, ["ScanCode", "Code", "StatusCode"]);
+    const message = firstString(latest, ["Reason", "Comment", "Status", "Description"]);
+    const location = firstString(latest, ["Location", "ServiceCentre", "StationName"]);
     return {
       status: mapGiglScanCode(code),
-      message: firstString(latest, ["Reason", "Comment", "Status", "Description"]),
-      location: firstString(latest, ["Location", "ServiceCentre", "StationName"]),
+      ...(message !== undefined ? { message } : {}),
+      ...(location !== undefined ? { location } : {}),
       eventTime: new Date(firstString(latest, ["ScanDate", "DateCreated", "DateTime"]) ?? Date.now()),
-      providerStatusCode: code,
+      ...(code !== undefined ? { providerStatusCode: code } : {}),
       metadata: { raw: jsonSafe(latest) },
     };
   }
