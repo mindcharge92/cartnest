@@ -17,6 +17,7 @@ const NOTIFICATION_EVENTS = new Set([
   "order.created",
   "payment.succeeded",
   "shipment.delivered",
+  "shipment.status_changed",
   "refund.succeeded",
   "return.status_changed",
 ]);
