@@ -77,32 +77,35 @@ export function buildApp(
   options: FastifyServerOptions = {},
   probes: ReadinessProbes = defaultProbes,
   database?: DatabaseClient,
+  installDefaultErrorHandler = true,
 ) {
   const environment = getApiEnvironment();
   const app = Fastify({ logger: environment.nodeEnv !== "test", ...options })
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
-  app.setErrorHandler((error: FastifyError, request, reply) => {
-    if (error.validation) {
-      return reply.code(400).send({
+  if (installDefaultErrorHandler) {
+    app.setErrorHandler((error: FastifyError, request, reply) => {
+      if (error.validation) {
+        return reply.code(400).send({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "The request does not match the required contract.",
+            requestId: request.id,
+            details: error.validation,
+          },
+        });
+      }
+      request.log.error({ err: error }, "Unhandled request error");
+      return reply.code(error.statusCode && error.statusCode >= 400 ? error.statusCode : 500).send({
         error: {
-          code: "VALIDATION_ERROR",
-          message: "The request does not match the required contract.",
+          code: error.statusCode === 429 ? "RATE_LIMITED" : "INTERNAL_ERROR",
+          message: error.statusCode === 429 ? "Too many requests." : "An unexpected error occurred.",
           requestId: request.id,
-          details: error.validation,
         },
       });
-    }
-    request.log.error({ err: error }, "Unhandled request error");
-    return reply.code(error.statusCode && error.statusCode >= 400 ? error.statusCode : 500).send({
-      error: {
-        code: error.statusCode === 429 ? "RATE_LIMITED" : "INTERNAL_ERROR",
-        message: error.statusCode === 429 ? "Too many requests." : "An unexpected error occurred.",
-        requestId: request.id,
-      },
     });
-  });
+  }
 
   registerSecurityPlugins(app, environment);
   void app.register(rawBodyPlugin, {
