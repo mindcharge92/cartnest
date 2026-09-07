@@ -8,9 +8,19 @@ import {
 describe("P6 checkout policies", () => {
   it("keeps financial placeholders neutral until configured policies are implemented", async () => {
     const quote = await new P6BaselineCheckoutFinancialPolicy().quoteStore({
+      userId: "user",
+      cartId: "cart",
       vendorId: "vendor",
       storeId: "store",
       currency: "NGN",
+      deliveryAddress: {
+        recipientName: "Daniel Praise",
+        phone: "+2348000000000",
+        line1: "1 Test Street",
+        city: "Lagos",
+        state: "Lagos",
+        countryCode: "NG",
+      },
       itemSubtotalAmountMinor: 100000n,
       lines: [],
     });
