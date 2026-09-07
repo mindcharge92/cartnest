@@ -18,12 +18,12 @@ export async function writeAuditEntry(
   return transaction.auditLog.create({
     data: {
       actorType: input.actorType,
-      actorUserId: input.actorUserId,
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
-      requestId: input.requestId,
-      metadata: input.metadata,
+      ...(input.actorUserId !== undefined ? { actorUserId: input.actorUserId } : {}),
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
     },
   });
 }
@@ -48,7 +48,7 @@ export async function enqueueOutboxEvent(
       eventType: input.eventType,
       eventVersion: input.eventVersion ?? 1,
       payload: input.payload,
-      availableAt: input.availableAt,
+      ...(input.availableAt !== undefined ? { availableAt: input.availableAt } : {}),
     },
   });
 }
@@ -92,10 +92,10 @@ export async function completeIdempotencyRecord(
     where: { id: input.id },
     data: {
       status: "COMPLETED",
-      resourceType: input.resourceType,
-      resourceId: input.resourceId,
       responseStatus: input.responseStatus,
-      responseBody: input.responseBody,
+      ...(input.resourceType !== undefined ? { resourceType: input.resourceType } : {}),
+      ...(input.resourceId !== undefined ? { resourceId: input.resourceId } : {}),
+      ...(input.responseBody !== undefined ? { responseBody: input.responseBody } : {}),
     },
   });
 }
