@@ -44,9 +44,10 @@ describe("P7 provider security primitives", () => {
     const secret = "paystack-test-secret";
     const raw = Buffer.from(JSON.stringify({ event: "charge.success", data: { reference: "ref" } }));
     const signature = createHmac("sha512", secret).update(raw).digest("hex");
+    const invalidSignature = `${signature.slice(0, -1)}${signature.endsWith("0") ? "1" : "0"}`;
     const adapter = new PaystackAdapter(secret);
     expect(adapter.verifyWebhook(raw, signature)).toBe(true);
-    expect(adapter.verifyWebhook(raw, `${signature.slice(0, -1)}0`)).toBe(false);
+    expect(adapter.verifyWebhook(raw, invalidSignature)).toBe(false);
   });
 
   it("verifies Flutterwave HMAC-SHA256 Base64 against the raw body", () => {
