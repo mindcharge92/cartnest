@@ -12,6 +12,7 @@ export {
   type ContractRequestOptions,
 } from "./contract-client.js";
 
+export { createAuthApi, type AuthApi } from "./auth.js";
 export { createVendorApi, type VendorApi } from "./vendor.js";
 export { createCatalogApi, type CatalogApi } from "./catalog.js";
 export { createInventoryApi, type InventoryApi } from "./inventory.js";
