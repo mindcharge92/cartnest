@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
-import { api, apiErrorMessage } from "../../lib/api";
+import { apiErrorMessage, authApi } from "../../lib/api";
 
 export default function VerifyPage() {
   const { session, reloadSession } = useSession();
@@ -27,15 +27,11 @@ export default function VerifyPage() {
     setMessage(null);
     setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/verification/confirm", { body: { token: token.trim() } });
-      if (!result.data) {
-        setError(apiErrorMessage(result.error, "Verification could not be completed."));
-        return;
-      }
+      await authApi.confirmVerification({ token: token.trim() });
       setMessage("Your identifier has been verified.");
       if (session) await reloadSession();
-    } catch {
-      setError("CartNest could not reach the verification service. Try again.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "CartNest could not reach the verification service. Try again."));
     } finally {
       setBusy(false);
     }
