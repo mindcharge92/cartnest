@@ -111,8 +111,8 @@ export class PrismaInventoryRepository implements InventoryRepository {
           variantId: input.variantId,
           delta: input.delta,
           reason: input.reason,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
+          ...(input.referenceType !== undefined ? { referenceType: input.referenceType } : {}),
+          ...(input.referenceId !== undefined ? { referenceId: input.referenceId } : {}),
           actorUserId: input.actorUserId,
         },
       });
