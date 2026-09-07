@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { api, apiErrorMessage } from "../../lib/api";
+import { apiErrorMessage, authApi } from "../../lib/api";
 
 export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState("");
@@ -16,14 +16,10 @@ export default function ForgotPasswordPage() {
     setMessage(null);
     setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/password-reset/request", { body: { identifier: identifier.trim() } });
-      if (!result.data) {
-        setError(apiErrorMessage(result.error, "Request could not be processed."));
-        return;
-      }
+      await authApi.requestPasswordReset({ identifier: identifier.trim() });
       setMessage("If the account exists, password-reset instructions will be sent.");
-    } catch {
-      setError("CartNest could not reach the recovery service. Try again.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "CartNest could not reach the recovery service. Try again."));
     } finally {
       setBusy(false);
     }
