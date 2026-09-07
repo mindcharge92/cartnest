@@ -26,7 +26,12 @@ export function buildHardenedApp(
     ? new AuthService(new PrismaAuthRepository(database), environment)
     : undefined;
   const privacyService = database ? new PrivacyService(database) : undefined;
-  registerPrivacyRoutes(app, { service: privacyService, authService });
+
+  // Keep P11 routes in the same post-Swagger registration phase as the base
+  // application routes so they are present in generated OpenAPI documents.
+  void app.register(async (routes) => {
+    registerPrivacyRoutes(routes, { service: privacyService, authService });
+  });
 
   return app;
 }
