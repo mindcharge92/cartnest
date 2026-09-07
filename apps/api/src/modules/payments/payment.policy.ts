@@ -123,7 +123,7 @@ export class DatabaseCheckoutFinancialPolicy implements CheckoutFinancialPolicy 
       if (userRedemptions >= promotion.perUserLimit) throw new Error("PROMOTION_USER_LIMIT_REACHED");
     }
 
-    let discount = 0n;
+    let discount: bigint;
     if (promotion.type === "PERCENTAGE") {
       discount = rateAmount(input.itemSubtotalAmountMinor, Number(promotion.value));
     } else {
