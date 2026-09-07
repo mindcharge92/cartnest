@@ -14,6 +14,8 @@ describe("P9 returns/refunds/reviews route contracts", () => {
     await app.ready();
 
     const paths = app.swagger().paths;
+    expect(paths).toBeDefined();
+    if (!paths) throw new Error("OpenAPI paths were not generated.");
     expect(paths["/api/v1/returns"]).toHaveProperty("get");
     expect(paths["/api/v1/returns"]).toHaveProperty("post");
     expect(paths["/api/v1/stores/{storeId}/returns"]).toHaveProperty("get");
