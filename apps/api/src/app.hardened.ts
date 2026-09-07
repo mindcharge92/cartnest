@@ -19,7 +19,7 @@ export function buildHardenedApp(
   database?: DatabaseClient,
 ) {
   const environment = getApiEnvironment();
-  const app = buildApp(options, probes, database);
+  const app = buildApp(options, probes, database, false);
   registerP11SecurityHardening(app, environment);
 
   const authService = database
