@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AuthGuard } from "../../components/auth-guard";
 import { useSession } from "../../components/session-provider";
 import { PrivacyCenter } from "../../features/privacy/privacy-center";
-import { API_BASE_URL, api, apiErrorMessage } from "../../lib/api";
+import { API_BASE_URL, apiErrorMessage, authApi } from "../../lib/api";
 
 function AccountPanel() {
   const { session, reloadSession, logoutAll } = useSession();
@@ -18,11 +18,10 @@ function AccountPanel() {
   async function requestVerification(channel: "email" | "phone") {
     setBusy(channel); setMessage(null); setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/verification/request", { body: { channel } });
-      if (!result.data) return setError(apiErrorMessage(result.error, "Verification request failed."));
+      await authApi.requestVerification({ channel });
       setMessage(`Verification requested for ${channel}. Use the token/link delivered through that channel.`);
-    } catch {
-      setError("CartNest could not reach the verification service.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "Verification request failed."));
     } finally { setBusy(null); }
   }
 
