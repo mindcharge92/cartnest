@@ -35,6 +35,28 @@ function retryDelayMs(attempt: number): number {
   return schedule[Math.min(Math.max(attempt - 1, 0), schedule.length - 1)] ?? 1_800_000;
 }
 
+function normalizedEnvelope(event: ClaimedOutboxEvent): DurableEventEnvelope {
+  let eventType = event.eventType;
+  if (
+    event.eventType === "shipment.status_changed" &&
+    event.payload &&
+    typeof event.payload === "object" &&
+    !Array.isArray(event.payload) &&
+    (event.payload as { status?: unknown }).status === "DELIVERED"
+  ) {
+    eventType = "shipment.delivered";
+  }
+  return {
+    eventId: event.id,
+    eventType,
+    eventVersion: event.eventVersion,
+    occurredAt: event.createdAt.toISOString(),
+    aggregateType: event.aggregateType,
+    aggregateId: event.aggregateId,
+    payload: event.payload,
+  };
+}
+
 export class OutboxDispatcher {
   private running = false;
 
@@ -86,18 +108,6 @@ export class OutboxDispatcher {
     `));
   }
 
-  private envelope(event: ClaimedOutboxEvent): DurableEventEnvelope {
-    return {
-      eventId: event.id,
-      eventType: event.eventType,
-      eventVersion: event.eventVersion,
-      occurredAt: event.createdAt.toISOString(),
-      aggregateType: event.aggregateType,
-      aggregateId: event.aggregateId,
-      payload: event.payload,
-    };
-  }
-
   private async markPublished(event: ClaimedOutboxEvent): Promise<void> {
     const changed = await this.database.outboxEvent.updateMany({
       where: { id: event.id, status: "PROCESSING", attempts: event.attempts },
@@ -145,13 +155,17 @@ export class OutboxDispatcher {
       return "failed";
     }
 
-    const subscriptions = queueSubscriptions(event.eventType);
-    const envelope = this.envelope(event);
+    const envelope = normalizedEnvelope(event);
+    const subscriptions = queueSubscriptions(envelope.eventType);
     try {
       // Domain facts may legitimately have no asynchronous subscriber yet.
       // They are still a valid outbox event, so zero subscribers is not a dead letter.
       for (const queueKey of subscriptions) {
-        await this.queues[queueKey].add(event.eventType, envelope, defaultEventJobOptions(envelope));
+        await this.queues[queueKey].add(
+          envelope.eventType,
+          envelope,
+          defaultEventJobOptions(envelope),
+        );
       }
       await this.markPublished(event);
       return "published";
