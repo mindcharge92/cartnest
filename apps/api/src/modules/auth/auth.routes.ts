@@ -106,10 +106,10 @@ function requireCsrf(request: FastifyRequest): void {
   }
 }
 
-async function requirePrincipal(request: FastifyRequest, service: AuthService) {
+async function requirePrincipal(request: FastifyRequest, service: AuthService | undefined) {
   const token = request.cookies[ACCESS_COOKIE];
   if (!token) throw new AuthError("UNAUTHENTICATED", "Authentication is required.", 401);
-  return service.verifyAccess(token);
+  return serviceOrThrow(service).verifyAccess(token);
 }
 
 export function registerSecurityPlugins(app: FastifyInstance, environment: ApiEnvironment): void {
@@ -196,8 +196,8 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     schema: { tags: ["auth"], operationId: "getCurrentSession", response: { 200: AuthSessionResponseSchema, 401: ApiErrorSchema, 503: ApiErrorSchema } },
   }, async (request, reply) => {
     try {
+      const principal = await requirePrincipal(request, options.service);
       const service = serviceOrThrow(options.service);
-      const principal = await requirePrincipal(request, service);
       let csrfToken = request.cookies[CSRF_COOKIE];
       if (!csrfToken) {
         csrfToken = randomOpaqueToken();
