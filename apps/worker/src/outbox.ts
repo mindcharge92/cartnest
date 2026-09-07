@@ -10,6 +10,7 @@ interface ClaimedOutboxEvent {
   readonly eventVersion: number;
   readonly payload: unknown;
   readonly attempts: number;
+  readonly lockedAt: Date;
   readonly createdAt: Date;
 }
 
@@ -72,17 +73,16 @@ export class OutboxDispatcher {
       WITH candidates AS (
         SELECT "id"
         FROM "OutboxEvent"
-        WHERE "attempts" < ${this.options.maxAttempts}
-          AND (
-            (
-              "status" IN ('PENDING'::"OutboxStatus", 'FAILED'::"OutboxStatus")
-              AND "availableAt" <= NOW()
-            )
-            OR (
-              "status" = 'PROCESSING'::"OutboxStatus"
-              AND "lockedAt" IS NOT NULL
-              AND "lockedAt" < ${staleBefore}
-            )
+        WHERE (
+            "status" IN ('PENDING'::"OutboxStatus", 'FAILED'::"OutboxStatus")
+            AND "attempts" < ${this.options.maxAttempts}
+            AND "availableAt" <= NOW()
+          )
+          OR (
+            "status" = 'PROCESSING'::"OutboxStatus"
+            AND "attempts" <= ${this.options.maxAttempts}
+            AND "lockedAt" IS NOT NULL
+            AND "lockedAt" < ${staleBefore}
           )
         ORDER BY "availableAt" ASC, "createdAt" ASC
         FOR UPDATE SKIP LOCKED
@@ -90,9 +90,12 @@ export class OutboxDispatcher {
       )
       UPDATE "OutboxEvent" AS event
       SET
+        "attempts" = CASE
+          WHEN event."status" = 'PROCESSING'::"OutboxStatus" THEN event."attempts"
+          ELSE event."attempts" + 1
+        END,
         "status" = 'PROCESSING'::"OutboxStatus",
         "lockedAt" = NOW(),
-        "attempts" = event."attempts" + 1,
         "lastError" = NULL
       FROM candidates
       WHERE event."id" = candidates."id"
@@ -104,13 +107,23 @@ export class OutboxDispatcher {
         event."eventVersion",
         event."payload",
         event."attempts",
+        event."lockedAt",
         event."createdAt"
     `));
   }
 
+  private leaseWhere(event: ClaimedOutboxEvent) {
+    return {
+      id: event.id,
+      status: "PROCESSING" as const,
+      attempts: event.attempts,
+      lockedAt: event.lockedAt,
+    };
+  }
+
   private async markPublished(event: ClaimedOutboxEvent): Promise<void> {
     const changed = await this.database.outboxEvent.updateMany({
-      where: { id: event.id, status: "PROCESSING", attempts: event.attempts },
+      where: this.leaseWhere(event),
       data: { status: "PUBLISHED", lockedAt: null, publishedAt: new Date(), lastError: null },
     });
     if (changed.count !== 1) {
@@ -120,8 +133,8 @@ export class OutboxDispatcher {
 
   private async markRetryableFailure(event: ClaimedOutboxEvent, error: unknown): Promise<void> {
     const exhausted = event.attempts >= this.options.maxAttempts;
-    await this.database.outboxEvent.updateMany({
-      where: { id: event.id, status: "PROCESSING", attempts: event.attempts },
+    const changed = await this.database.outboxEvent.updateMany({
+      where: this.leaseWhere(event),
       data: {
         status: "FAILED",
         lockedAt: null,
@@ -131,11 +144,14 @@ export class OutboxDispatcher {
           : new Date(Date.now() + retryDelayMs(event.attempts)),
       },
     });
+    if (changed.count !== 1) {
+      throw new Error(`OUTBOX_FAILURE_STATE_CONFLICT:${event.id}`);
+    }
   }
 
   private async markPermanentFailure(event: ClaimedOutboxEvent, reason: string): Promise<void> {
-    await this.database.outboxEvent.updateMany({
-      where: { id: event.id, status: "PROCESSING", attempts: event.attempts },
+    const changed = await this.database.outboxEvent.updateMany({
+      where: this.leaseWhere(event),
       data: {
         status: "FAILED",
         attempts: this.options.maxAttempts,
@@ -144,6 +160,9 @@ export class OutboxDispatcher {
         availableAt: new Date("9999-12-31T23:59:59.999Z"),
       },
     });
+    if (changed.count !== 1) {
+      throw new Error(`OUTBOX_PERMANENT_FAILURE_STATE_CONFLICT:${event.id}`);
+    }
   }
 
   private async publish(event: ClaimedOutboxEvent): Promise<"published" | "failed"> {
@@ -170,7 +189,17 @@ export class OutboxDispatcher {
       await this.markPublished(event);
       return "published";
     } catch (error) {
-      await this.markRetryableFailure(event, error);
+      try {
+        await this.markRetryableFailure(event, error);
+      } catch (stateError) {
+        if (
+          stateError instanceof Error &&
+          stateError.message.startsWith("OUTBOX_FAILURE_STATE_CONFLICT:")
+        ) {
+          throw stateError;
+        }
+        throw stateError;
+      }
       return "failed";
     }
   }
