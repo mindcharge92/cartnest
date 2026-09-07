@@ -291,7 +291,7 @@ export class OrderService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const result = await this.repository.listStoreVendorOrders({ storeId, ...(query.status ? { status: query.status } : {}), page, pageSize });
-    return { items: result.items.map(mapVendorOrder), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize) } };
+    return { items: result.items.map((item) => mapVendorOrder(item)), pagination: { page, pageSize, totalItems: result.totalItems, totalPages: result.totalItems === 0 ? 0 : Math.ceil(result.totalItems / pageSize) } };
   }
 
   async getVendorOrder(principal: AccessPrincipal, vendorOrderId: string): Promise<VendorOrderDto> {
