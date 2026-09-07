@@ -2,16 +2,19 @@ import { Prisma, type DatabaseClient } from "@repo/database";
 import { defaultEventJobOptions, queueSubscriptions, type QueueRegistry } from "./queues.js";
 import { SUPPORTED_EVENT_VERSION, type DurableEventEnvelope } from "./types.js";
 
-interface ClaimedOutboxEvent {
+export interface OutboxEventRecord {
   readonly id: string;
   readonly aggregateType: string;
   readonly aggregateId: string;
   readonly eventType: string;
   readonly eventVersion: number;
   readonly payload: unknown;
+  readonly createdAt: Date;
+}
+
+interface ClaimedOutboxEvent extends OutboxEventRecord {
   readonly attempts: number;
   readonly lockedAt: Date;
-  readonly createdAt: Date;
 }
 
 export interface OutboxDispatcherOptions {
@@ -36,7 +39,7 @@ function retryDelayMs(attempt: number): number {
   return schedule[Math.min(Math.max(attempt - 1, 0), schedule.length - 1)] ?? 1_800_000;
 }
 
-function normalizedEnvelope(event: ClaimedOutboxEvent): DurableEventEnvelope {
+export function buildDurableEventEnvelope(event: OutboxEventRecord): DurableEventEnvelope {
   let eventType = event.eventType;
   if (
     event.eventType === "shipment.status_changed" &&
@@ -174,7 +177,7 @@ export class OutboxDispatcher {
       return "failed";
     }
 
-    const envelope = normalizedEnvelope(event);
+    const envelope = buildDurableEventEnvelope(event);
     const subscriptions = queueSubscriptions(envelope.eventType);
     try {
       // Domain facts may legitimately have no asynchronous subscriber yet.
@@ -189,17 +192,7 @@ export class OutboxDispatcher {
       await this.markPublished(event);
       return "published";
     } catch (error) {
-      try {
-        await this.markRetryableFailure(event, error);
-      } catch (stateError) {
-        if (
-          stateError instanceof Error &&
-          stateError.message.startsWith("OUTBOX_FAILURE_STATE_CONFLICT:")
-        ) {
-          throw stateError;
-        }
-        throw stateError;
-      }
+      await this.markRetryableFailure(event, error);
       return "failed";
     }
   }
