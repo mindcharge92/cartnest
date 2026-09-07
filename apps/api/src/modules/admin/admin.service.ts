@@ -265,14 +265,18 @@ export class AdminService {
     const value = BigInt(body.value);
     if (endsAt && endsAt <= startsAt) throw new AdminError("INVALID_PROMOTION_PERIOD", "Promotion end time must be after its start time.", 400);
     if (body.type === "PERCENTAGE" && value > 10000n) throw new AdminError("INVALID_PROMOTION_VALUE", "Percentage promotion value is expressed in basis points and cannot exceed 10000.", 400);
-    if (body.type === "FIXED_AMOUNT" && !body.currency) throw new AdminError("PROMOTION_CURRENCY_REQUIRED", "Fixed-amount promotions require a currency.", 400);
+    let currency: string | null = null;
+    if (body.type === "FIXED_AMOUNT") {
+      if (!body.currency) throw new AdminError("PROMOTION_CURRENCY_REQUIRED", "Fixed-amount promotions require a currency.", 400);
+      currency = body.currency;
+    }
     const record = await this.database.$transaction(async (tx) => {
       const created = await tx.promotion.create({ data: {
         code: body.code.trim().toUpperCase(),
         name: body.name,
         type: body.type,
         value,
-        currency: body.type === "FIXED_AMOUNT" ? body.currency : null,
+        currency,
         minOrderAmountMinor: body.minOrderAmountMinor ? BigInt(body.minOrderAmountMinor) : null,
         maxRedemptions: body.maxRedemptions ?? null,
         perUserLimit: body.perUserLimit ?? null,
