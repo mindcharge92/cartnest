@@ -18,6 +18,12 @@ interface Target {
   readonly payload: Readonly<Record<string, unknown>>;
 }
 
+function missingAggregate(event: DurableEventEnvelope): never {
+  throw new Error(
+    `NOTIFICATION_AGGREGATE_NOT_FOUND:${event.eventType}:${event.aggregateType}:${event.aggregateId}`,
+  );
+}
+
 async function preferenceEnabled(
   database: DatabaseClient,
   userId: string,
@@ -133,7 +139,7 @@ export async function materializeNotificationEvent(
         vendorOrders: { select: { id: true, vendorId: true, store: { select: { name: true } } } },
       },
     });
-    if (!order) return 0;
+    if (!order) missingAggregate(event);
     const customer = { userId: order.user.id, email: order.user.email, phone: order.user.phone };
     targets.push(...customerTargets(
       customer,
@@ -175,7 +181,7 @@ export async function materializeNotificationEvent(
         },
       },
     });
-    if (!intent) return 0;
+    if (!intent) missingAggregate(event);
     const customer = {
       userId: intent.order.user.id,
       email: intent.order.user.email,
@@ -218,7 +224,7 @@ export async function materializeNotificationEvent(
         },
       },
     });
-    if (!shipment) return 0;
+    if (!shipment) missingAggregate(event);
     const user = shipment.vendorOrder.order.user;
     const customer = { userId: user.id, email: user.email, phone: user.phone };
     targets.push(...customerTargets(
@@ -253,7 +259,7 @@ export async function materializeNotificationEvent(
         vendorOrder: true,
       },
     });
-    if (!refund) return 0;
+    if (!refund) missingAggregate(event);
     const user = refund.paymentIntent.order.user;
     const customer = { userId: user.id, email: user.email, phone: user.phone };
     targets.push(...customerTargets(
@@ -290,7 +296,7 @@ export async function materializeNotificationEvent(
       where: { id: event.aggregateId },
       include: { user: { select: { id: true, email: true, phone: true } }, vendorOrder: true },
     });
-    if (!request) return 0;
+    if (!request) missingAggregate(event);
     const customer = {
       userId: request.user.id,
       email: request.user.email,
