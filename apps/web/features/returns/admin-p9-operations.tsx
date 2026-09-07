@@ -217,7 +217,7 @@ export function AdminP9Operations() {
 
             <div className="panel compactPanel">
               <label className="field">Review status
-                <select value={reviewStatus} disabled={state === "loading" || busyKey !== null} onChange={(event) => setReviewStatus(event.target.value as "" | ReviewStatusDto)}>
+                <select value={reviewStatus} disabled={busyKey !== null} onChange={(event) => setReviewStatus(event.target.value as "" | ReviewStatusDto)}>
                   <option value="">All statuses</option>
                   {REVIEW_STATUSES.map((status) => <option key={status} value={status}>{orderStatusLabel(status)}</option>)}
                 </select>
