@@ -21,13 +21,6 @@ const NOTIFICATION_EVENTS = new Set([
   "return.status_changed",
 ]);
 
-const ANALYTICS_EVENTS = new Set([
-  "order.created",
-  "payment.succeeded",
-  "refund.succeeded",
-  "shipment.delivered",
-]);
-
 export function redisConnectionOptions(redisUrl: string) {
   const url = new URL(redisUrl);
   if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
@@ -47,15 +40,13 @@ export function redisConnectionOptions(redisUrl: string) {
   };
 }
 
+/**
+ * Only subscribe an outbox event to queues that have a real consumer today.
+ * Adding a prefix here without a processor would incorrectly mark durable work
+ * published while BullMQ only dead-letters it later.
+ */
 export function queueSubscriptions(eventType: string): readonly QueueKey[] {
-  const queues = new Set<QueueKey>();
-  if (NOTIFICATION_EVENTS.has(eventType)) queues.add("notifications");
-  if (ANALYTICS_EVENTS.has(eventType)) queues.add("analytics");
-  if (eventType.startsWith("payment.") || eventType.startsWith("refund.")) queues.add("payments");
-  if (eventType.startsWith("inventory.")) queues.add("inventory");
-  if (eventType.startsWith("shipment.") || eventType.startsWith("logistics.")) queues.add("logistics");
-  if (eventType.startsWith("maintenance.")) queues.add("maintenance");
-  return [...queues];
+  return NOTIFICATION_EVENTS.has(eventType) ? ["notifications"] : [];
 }
 
 export function defaultEventJobOptions(event: DurableEventEnvelope): JobsOptions {
