@@ -290,24 +290,6 @@ export function buildApp(
   const adminOperationsService = database ? new AdminOperationsService(database) : undefined;
   const notificationService = database ? new NotificationService(database) : undefined;
 
-  registerAuthRoutes(app, { service: authService, environment });
-  registerVendorRoutes(app, { service: vendorService, authService });
-  registerCatalogRoutes(app, { service: catalogService, authService });
-  registerInventoryRoutes(app, { service: inventoryService, authService });
-  registerWishlistRoutes(app, { service: wishlistService, authService });
-  registerCartRoutes(app, { service: cartService, authService });
-  registerOrderRoutes(app, { service: orderService, authService });
-  registerPaymentRoutes(app, { service: paymentService, authService });
-  registerLogisticsRoutes(app, {
-    service: logisticsService,
-    buyerQueryService: buyerLogisticsQueryService,
-    authService,
-  });
-  registerReturnsRoutes(app, { service: returnsService, authService });
-  registerAdminRoutes(app, { service: adminService, authService });
-  registerAdminOperationsRoutes(app, { service: adminOperationsService, authService });
-  registerNotificationRoutes(app, { service: notificationService, authService });
-
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);
     return {
@@ -316,58 +298,81 @@ export function buildApp(
     };
   }
 
-  app.get(
-    "/health",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getHealth",
-        response: { 200: HealthResponseSchema },
-      },
-    },
-    async () => ({
-      status: "ok" as const,
-      service: "cartnest-api" as const,
-      uptimeSeconds: Math.floor(process.uptime()),
-    }),
-  );
+  // @fastify/swagger discovers routes through an onRoute hook. Fastify route
+  // registration is synchronous, so application routes must be registered in
+  // a plugin that boots after Swagger rather than directly on the root instance.
+  void app.register(async (routes) => {
+    registerAuthRoutes(routes, { service: authService, environment });
+    registerVendorRoutes(routes, { service: vendorService, authService });
+    registerCatalogRoutes(routes, { service: catalogService, authService });
+    registerInventoryRoutes(routes, { service: inventoryService, authService });
+    registerWishlistRoutes(routes, { service: wishlistService, authService });
+    registerCartRoutes(routes, { service: cartService, authService });
+    registerOrderRoutes(routes, { service: orderService, authService });
+    registerPaymentRoutes(routes, { service: paymentService, authService });
+    registerLogisticsRoutes(routes, {
+      service: logisticsService,
+      buyerQueryService: buyerLogisticsQueryService,
+      authService,
+    });
+    registerReturnsRoutes(routes, { service: returnsService, authService });
+    registerAdminRoutes(routes, { service: adminService, authService });
+    registerAdminOperationsRoutes(routes, { service: adminOperationsService, authService });
+    registerNotificationRoutes(routes, { service: notificationService, authService });
 
-  app.get(
-    "/ready",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getReadiness",
-        response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
+    routes.get(
+      "/health",
+      {
+        schema: {
+          tags: ["system"],
+          operationId: "getHealth",
+          response: { 200: HealthResponseSchema },
+        },
       },
-    },
-    async (_request, reply) => {
-      const dependencies = await dependencyStates();
-      const ready = dependencies.database === "ready" && dependencies.redis === "ready";
-      return reply.code(ready ? 200 : 503).send({
-        status: ready ? ("ready" as const) : ("not-ready" as const),
+      async () => ({
+        status: "ok" as const,
         service: "cartnest-api" as const,
-        dependencies,
-      });
-    },
-  );
+        uptimeSeconds: Math.floor(process.uptime()),
+      }),
+    );
 
-  app.get(
-    "/api/v1/system/info",
-    {
-      schema: {
-        tags: ["system"],
-        operationId: "getSystemInfo",
-        response: { 200: SystemInfoResponseSchema },
+    routes.get(
+      "/ready",
+      {
+        schema: {
+          tags: ["system"],
+          operationId: "getReadiness",
+          response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
+        },
       },
-    },
-    async () => ({
-      service: "cartnest-api" as const,
-      apiVersion: "v1" as const,
-      timestamp: new Date().toISOString(),
-      dependencies: await dependencyStates(),
-    }),
-  );
+      async (_request, reply) => {
+        const dependencies = await dependencyStates();
+        const ready = dependencies.database === "ready" && dependencies.redis === "ready";
+        return reply.code(ready ? 200 : 503).send({
+          status: ready ? ("ready" as const) : ("not-ready" as const),
+          service: "cartnest-api" as const,
+          dependencies,
+        });
+      },
+    );
+
+    routes.get(
+      "/api/v1/system/info",
+      {
+        schema: {
+          tags: ["system"],
+          operationId: "getSystemInfo",
+          response: { 200: SystemInfoResponseSchema },
+        },
+      },
+      async () => ({
+        service: "cartnest-api" as const,
+        apiVersion: "v1" as const,
+        timestamp: new Date().toISOString(),
+        dependencies: await dependencyStates(),
+      }),
+    );
+  });
 
   return app;
 }
