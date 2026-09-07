@@ -201,7 +201,7 @@ const productInclude = {
     },
   },
   media: { orderBy: [{ displayOrder: "asc" as const }, { createdAt: "asc" as const }] },
-} as const;
+} satisfies Prisma.ProductInclude;
 
 const variantInclude = {
   optionValues: {
@@ -228,7 +228,7 @@ export class PrismaCatalogRepository implements CatalogRepository {
 
   async listCategories(status?: CategoryStatus): Promise<CategoryRecord[]> {
     return this.database.category.findMany({
-      where: status ? { status } : undefined,
+      ...(status ? { where: { status } } : {}),
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
   }
@@ -484,8 +484,8 @@ export class PrismaCatalogRepository implements CatalogRepository {
         bucket: input.bucket,
         mimeType: input.mimeType,
         sizeBytes: BigInt(input.sizeBytes),
-        originalFilename: input.originalFilename,
-        altText: input.altText,
+        ...(input.originalFilename !== undefined ? { originalFilename: input.originalFilename } : {}),
+        ...(input.altText !== undefined ? { altText: input.altText } : {}),
         displayOrder: input.displayOrder,
         status: "PENDING",
         createdBy: input.createdBy,
