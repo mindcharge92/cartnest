@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
-import { API_BASE_URL, api, apiErrorMessage } from "../../lib/api";
+import { API_BASE_URL, apiErrorMessage, authApi } from "../../lib/api";
 import { safeReturnTo } from "../../lib/navigation";
 
 export default function LoginPage() {
@@ -25,15 +25,11 @@ export default function LoginPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const result = await api.POST("/api/v1/auth/login", { body: { identifier: identifier.trim(), password } });
-      if (!result.data) {
-        setMessage(apiErrorMessage(result.error, "Unable to sign in."));
-        return;
-      }
-      adoptSession(result.data);
-      router.replace(result.data.mfa.required && !result.data.mfa.satisfied ? "/mfa" : returnTo);
-    } catch {
-      setMessage("CartNest could not reach the sign-in service. Try again.");
+      const session = await authApi.login({ identifier: identifier.trim(), password });
+      adoptSession(session);
+      router.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : returnTo);
+    } catch (caught) {
+      setMessage(apiErrorMessage(caught, "CartNest could not reach the sign-in service. Try again."));
     } finally {
       setBusy(false);
     }
