@@ -8,7 +8,7 @@ export interface AuditEntryInput {
   readonly entityType: string;
   readonly entityId: string;
   readonly requestId?: string;
-  readonly metadata?: Prisma.InputJsonValue;
+  readonly metadata?: Prisma.InputJsonValue | undefined;
 }
 
 export async function writeAuditEntry(
