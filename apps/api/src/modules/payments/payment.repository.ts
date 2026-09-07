@@ -305,7 +305,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
             amountMinor: intent.amountMinor,
             currency: intent.currency,
             status: "PENDING",
-            channel: input.channel,
+            ...(input.channel !== undefined ? { channel: input.channel } : {}),
           },
         });
         return { kind: "created" as const, intent, attempt, idempotencyId: idempotency.id };
@@ -391,7 +391,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
           amountMinor: input.expectedAmountMinor,
           currency: input.expectedCurrency,
           status: "PENDING",
-          channel: input.channel,
+          ...(input.channel !== undefined ? { channel: input.channel } : {}),
         },
       });
     });
@@ -410,8 +410,8 @@ export class PrismaPaymentRepository implements PaymentRepository {
         where: { id: input.attemptId },
         data: {
           providerReference: input.providerReference,
-          providerTxnId: input.providerTransactionId,
-          channel: input.channel,
+          ...(input.providerTransactionId !== undefined ? { providerTxnId: input.providerTransactionId } : {}),
+          ...(input.channel !== undefined ? { channel: input.channel } : {}),
           status: "REQUIRES_ACTION",
           failureCategory: null,
         },
@@ -520,7 +520,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
       const event = await this.database.providerEvent.create({
         data: {
           provider: input.provider,
-          externalEventId: input.externalEventId,
+          ...(input.externalEventId !== undefined ? { externalEventId: input.externalEventId } : {}),
           fingerprint: input.fingerprint,
           eventType: input.eventType,
           status: "RECEIVED",
@@ -552,7 +552,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
       where: { id: eventId },
       data: {
         status,
-        paymentAttemptId: attemptId,
+        ...(attemptId !== undefined ? { paymentAttemptId: attemptId } : {}),
         processedAt: new Date(),
       },
     });
@@ -598,7 +598,9 @@ export class PrismaPaymentRepository implements PaymentRepository {
         data: {
           status: "SUCCEEDED",
           failureCategory: null,
-          providerTxnId: input.verification.providerTransactionId,
+          ...(input.verification.providerTransactionId !== undefined
+            ? { providerTxnId: input.verification.providerTransactionId }
+            : {}),
           channel: input.verification.channel ?? attempt.channel,
           confirmedAt: input.now,
         },
@@ -787,7 +789,9 @@ export class PrismaPaymentRepository implements PaymentRepository {
         where: { id: attempt.id },
         data: {
           status: nextStatus,
-          providerTxnId: input.verification.providerTransactionId,
+          ...(input.verification.providerTransactionId !== undefined
+            ? { providerTxnId: input.verification.providerTransactionId }
+            : {}),
           channel: input.verification.channel ?? attempt.channel,
           failureCategory: input.status === "UNKNOWN" ? "RECONCILIATION_UNKNOWN" : null,
         },
