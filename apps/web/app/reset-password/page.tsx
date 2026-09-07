@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, apiErrorMessage } from "../../lib/api";
+import { apiErrorMessage, authApi } from "../../lib/api";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
@@ -26,15 +26,11 @@ export default function ResetPasswordPage() {
     setMessage(null);
     setError(null);
     try {
-      const result = await api.POST("/api/v1/auth/password-reset/confirm", { body: { token: token.trim(), newPassword } });
-      if (!result.data) {
-        setError(apiErrorMessage(result.error, "Password reset failed."));
-        return;
-      }
+      await authApi.confirmPasswordReset({ token: token.trim(), newPassword });
       setMessage("Password changed. Existing sessions have been revoked; sign in again.");
       setNewPassword("");
-    } catch {
-      setError("CartNest could not reach the password-reset service. Try again.");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "CartNest could not reach the password-reset service. Try again."));
     } finally {
       setBusy(false);
     }
