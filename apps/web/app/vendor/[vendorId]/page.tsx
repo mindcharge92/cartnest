@@ -61,11 +61,13 @@ function VendorDashboard() {
   if (state === "loading") return <LoadingState label="Loading vendor workspace…" />;
   if (state === "error" || !access) return <ErrorState title="Vendor workspace unavailable" message={error ?? "CartNest could not load this vendor."} action={<button className="secondaryButton" onClick={() => void reload()}>Try again</button>} />;
 
+  const currentAccess = access;
+
   async function acceptInvitation() {
     setAccepting(true);
     try {
-      const membership = await vendorApi.acceptMembership(access.vendor.id);
-      setAccess({ ...access, membership });
+      const membership = await vendorApi.acceptMembership(currentAccess.vendor.id);
+      setAccess({ ...currentAccess, membership });
     } catch (caught) {
       setSummaryError(apiErrorMessage(caught, "The vendor invitation could not be accepted."));
     } finally {
@@ -79,17 +81,17 @@ function VendorDashboard() {
 
   return (
     <main className="pageShell">
-      <VendorWorkspaceShell access={access}>
+      <VendorWorkspaceShell access={currentAccess}>
         <div className="workspacePageHeader">
           <div>
             <p className="eyebrow">Vendor overview</p>
-            <h1 className="pageTitle">{access.vendor.displayName}</h1>
+            <h1 className="pageTitle">{currentAccess.vendor.displayName}</h1>
             <p className="muted">Business status, stores, verification and settlement-readiness in one place.</p>
           </div>
-          <VendorStatusPill status={access.vendor.status} />
+          <VendorStatusPill status={currentAccess.vendor.status} />
         </div>
 
-        {access.membership.status === "INVITED" ? (
+        {currentAccess.membership.status === "INVITED" ? (
           <section className="calloutCard">
             <div><strong>You have been invited to this vendor.</strong><p>Accept the invitation before vendor permissions become active.</p></div>
             <button className="primaryButton" disabled={accepting} onClick={() => void acceptInvitation()}>{accepting ? "Accepting…" : "Accept invitation"}</button>
@@ -100,7 +102,7 @@ function VendorDashboard() {
         {summaryLoading ? <p className="muted" aria-live="polite">Refreshing business summary…</p> : null}
 
         <div className="metricGrid">
-          <article className="metricCard"><span>Vendor state</span><strong>{access.vendor.status}</strong><small>Admin approval controls selling eligibility.</small></article>
+          <article className="metricCard"><span>Vendor state</span><strong>{currentAccess.vendor.status}</strong><small>Admin approval controls selling eligibility.</small></article>
           <article className="metricCard"><span>Stores</span><strong>{stores.length}</strong><small>{activeStores} active storefront{activeStores === 1 ? "" : "s"}.</small></article>
           <article className="metricCard"><span>Required KYC</span><strong>{Number(businessVerified) + Number(identityVerified)}/2</strong><small>Business and identity verification.</small></article>
           <article className="metricCard"><span>Settlement accounts</span><strong>{providerAccounts.filter((account) => account.status === "ACTIVE").length}</strong><small>Active payment-provider accounts.</small></article>
@@ -120,7 +122,7 @@ function VendorDashboard() {
               <div><strong>Create a store</strong><p>Prepare storefront details while approval is pending.</p></div>
             </Link>
             <div className="checklistCard checklistCardStatic">
-              <span className={access.vendor.status === "APPROVED" ? "checkMark checkMarkDone" : "checkMark"}>{access.vendor.status === "APPROVED" ? "✓" : "3"}</span>
+              <span className={currentAccess.vendor.status === "APPROVED" ? "checkMark checkMarkDone" : "checkMark"}>{currentAccess.vendor.status === "APPROVED" ? "✓" : "3"}</span>
               <div><strong>Admin approval</strong><p>Approval is required before an eligible store can become active.</p></div>
             </div>
           </div>
