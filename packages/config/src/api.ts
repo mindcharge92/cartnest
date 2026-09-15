@@ -38,6 +38,9 @@ export interface ApiEnvironment {
   readonly giglAccessToken: string | undefined;
   readonly giglCustomerCode: string | undefined;
   readonly giglBaseUrl: string;
+  readonly resendApiKey: string | undefined;
+  readonly emailFrom: string | undefined;
+  readonly backgroundTasksEnabled: boolean;
 }
 
 function requiredSecret(
@@ -90,5 +93,8 @@ export function getApiEnvironment(source: NodeJS.ProcessEnv = process.env): ApiE
     giglAccessToken: readString(source, "GIGL_ACCESS_TOKEN"),
     giglCustomerCode: readString(source, "GIGL_CUSTOMER_CODE"),
     giglBaseUrl: readUrl(source, "GIGL_BASE_URL", "https://dev-thirdpartynode.theagilitysystems.com/") ?? "https://dev-thirdpartynode.theagilitysystems.com/",
+    resendApiKey: readString(source, "RESEND_API_KEY"),
+    emailFrom: readString(source, "EMAIL_FROM"),
+    backgroundTasksEnabled: readBoolean(source, "BACKGROUND_TASKS_ENABLED", nodeEnv !== "test"),
   });
 }

@@ -107,6 +107,7 @@ export type CheckoutCreateResult =
   | { readonly kind: "stock_conflict"; readonly variantId: string };
 
 export interface OrderRepository {
+  replayExisting(userId: string, idempotencyKey: string, requestFingerprint: string): Promise<CheckoutCreateResult | null>;
   getCheckoutDraft(userId: string): Promise<CheckoutDraft | null>;
   createCheckout(input: {
     userId: string;
@@ -274,7 +275,7 @@ export class PrismaOrderRepository implements OrderRepository {
     };
   }
 
-  private async replayExisting(
+  async replayExisting(
     userId: string,
     idempotencyKey: string,
     requestFingerprint: string,

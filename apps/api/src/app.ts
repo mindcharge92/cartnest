@@ -13,6 +13,8 @@ import {
 import type { DatabaseClient } from "@repo/database";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import rawBodyPlugin from "fastify-raw-body";
+import { registerBackgroundTasks } from "./background.js";
+import { NotificationDelivery, ResendEmailSender } from "./modules/notifications/notification.delivery.js";
 import { registerAdminOperationsRoutes } from "./modules/admin/admin.operations.routes.js";
 import { AdminOperationsService } from "./modules/admin/admin.operations.service.js";
 import { registerAdminRoutes } from "./modules/admin/admin.routes.js";
@@ -153,8 +155,13 @@ export function buildApp(
     });
   }
 
+  const emailSender = environment.resendApiKey && environment.emailFrom
+    ? new ResendEmailSender(environment.resendApiKey, environment.emailFrom) : undefined;
+  const notificationDelivery = database
+    ? new NotificationDelivery(database, environment.mfaEncryptionKey, environment.webBaseUrl, emailSender)
+    : undefined;
   const authService = database
-    ? new AuthService(new PrismaAuthRepository(database), environment)
+    ? new AuthService(new PrismaAuthRepository(database), environment, emailSender ? notificationDelivery : undefined)
     : undefined;
   const vendorService = database
     ? new VendorService(new PrismaVendorRepository(database))
@@ -289,6 +296,14 @@ export function buildApp(
   const adminService = database && vendorBoundary ? new AdminService(database, vendorBoundary) : undefined;
   const adminOperationsService = database ? new AdminOperationsService(database) : undefined;
   const notificationService = database ? new NotificationService(database) : undefined;
+  if (environment.backgroundTasksEnabled && paymentService && returnsService && logisticsService && notificationDelivery) {
+    registerBackgroundTasks(app, [
+      { name: "payments.reconcile", run: () => paymentService.reconcilePending(10) },
+      { name: "refunds.reconcile", run: () => returnsService.reconcilePendingRefunds(10) },
+      { name: "logistics.track", run: () => logisticsService.syncGiglTracking(10) },
+      { name: "notifications.deliver", run: () => notificationDelivery.deliverPending(10) },
+    ]);
+  }
 
   async function dependencyStates() {
     const [databaseReady, redisReady] = await Promise.all([probes.database(), probes.redis()]);

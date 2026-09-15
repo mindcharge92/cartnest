@@ -77,7 +77,13 @@ function normalizedIdentifier(value: string): string {
 }
 
 export class AuthService {
-  constructor(private readonly repository: AuthRepository, private readonly environment: ApiEnvironment) {}
+  constructor(
+    private readonly repository: AuthRepository,
+    private readonly environment: ApiEnvironment,
+    private readonly delivery?: {
+      queueAuth(input: { userId: string; recipient: string; token: string; purpose: "verification" | "password-reset" }): Promise<void>;
+    },
+  ) {}
 
   async register(input: RegisterBodyDto, requestId?: string): Promise<SessionArtifacts> {
     if (!input.email && !input.phone) throw new AuthError("IDENTIFIER_REQUIRED", "Email or phone is required.", 400);
@@ -189,6 +195,12 @@ export class AuthService {
   }
 
   async requestPasswordReset(identifier: string, requestId?: string): Promise<string | undefined> {
+    if (this.environment.nodeEnv === "production" && !identifier.includes("@")) {
+      throw new AuthError("SMS_DELIVERY_UNAVAILABLE", "Phone recovery is unavailable. Please use your email address.", 503);
+    }
+    if (!this.delivery && this.environment.nodeEnv === "production") {
+      throw new AuthError("EMAIL_DELIVERY_UNAVAILABLE", "Email delivery is currently unavailable.", 503);
+    }
     let normalized: string;
     try { normalized = normalizedIdentifier(identifier); } catch { return undefined; }
     const user = await this.repository.findUserByIdentifier(normalized);
@@ -197,6 +209,9 @@ export class AuthService {
     const now = new Date();
     await this.repository.recordActionToken(user.id, "auth.password-reset", hashOpaqueToken(jti), new Date(now.getTime() + PASSWORD_RESET_TTL_SECONDS * 1000));
     const token = await signActionToken(this.environment.authJwtSecret, { userId: user.id, purpose: "password-reset", jti }, PASSWORD_RESET_TTL_SECONDS, now);
+    if (this.delivery && user.email) {
+      await this.delivery.queueAuth({ userId: user.id, recipient: user.email, token, purpose: "password-reset" });
+    }
     await this.repository.writeAudit({ actorType: "SYSTEM", actorUserId: user.id, action: "auth.password-reset.requested", entityType: "User", entityId: user.id, ...(requestId ? { requestId } : {}) });
     return token;
   }
@@ -212,6 +227,12 @@ export class AuthService {
   }
 
   async requestVerification(principal: AccessPrincipal, channel: VerificationChannelDto, requestId?: string): Promise<string> {
+    if (channel === "phone" && (this.environment.nodeEnv === "production" || !this.environment.exposeDevelopmentAuthTokens)) {
+      throw new AuthError("SMS_DELIVERY_UNAVAILABLE", "Phone verification is unavailable. Please verify your email.", 503);
+    }
+    if (channel === "email" && !this.delivery && this.environment.nodeEnv === "production") {
+      throw new AuthError("EMAIL_DELIVERY_UNAVAILABLE", "Email delivery is currently unavailable.", 503);
+    }
     const user = await this.repository.findUserById(principal.userId);
     if (!user) throw new AuthError("UNAUTHENTICATED", "Authentication is required.", 401);
     if (channel === "email" && !user.email) throw new AuthError("EMAIL_REQUIRED", "Add an email first.", 400);
@@ -221,6 +242,9 @@ export class AuthService {
     const now = new Date();
     await this.repository.recordActionToken(user.id, `auth.${purpose}`, hashOpaqueToken(jti), new Date(now.getTime() + VERIFICATION_TTL_SECONDS * 1000));
     const token = await signActionToken(this.environment.authJwtSecret, { userId: user.id, purpose, jti, channel }, VERIFICATION_TTL_SECONDS, now);
+    if (channel === "email" && this.delivery && user.email) {
+      await this.delivery.queueAuth({ userId: user.id, recipient: user.email, token, purpose: "verification" });
+    }
     await this.repository.writeAudit({ actorType: "USER", actorUserId: user.id, action: `auth.verification.${channel}.requested`, entityType: "User", entityId: user.id, ...(requestId ? { requestId } : {}) });
     return token;
   }

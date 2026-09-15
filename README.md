@@ -2,9 +2,9 @@
 
 CartNest is a multi-vendor e-commerce marketplace for Nigerian businesses.
 
-**Current implementation track:** Frontend & integration pass. Backend/domain source baselines for P0–P11 are implemented, while P12 staging/rehearsal tooling is prepared but not yet exit-gate verified. Frontend source baselines are now implemented through **FP7**.
+**Current implementation track:** Backend/domain and frontend integrations through P11/FP11 are implemented and locally verified. P12 staging/rehearsal tooling, executable migrations, recovery verification, and a free Render preview blueprint are prepared. The P12 exit gate remains open until a real staging deployment, provider sandboxes, and UAT evidence are recorded.
 
-The web pass currently includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, public catalog/product/variant/media integration, authenticated wishlist and multi-store cart flows, vendor inventory management, delivery-aware checkout, idempotent parent-order creation, buyer order history/detail, vendor order queues, hosted payment handoff, verified provider reconciliation, and payment-aware cancellation/concurrency protection.
+The web application includes the responsive marketplace shell, secure typed browser transport, authentication/account security, vendor/store/KYC/staff workspaces, catalog/media integration, wishlist and multi-store cart flows, inventory, delivery-aware checkout, idempotent parent-order creation, payment reconciliation, logistics/tracking, returns/reviews, admin/operations, and privacy/security workflows.
 
 See:
 
@@ -15,8 +15,12 @@ See:
 - [`docs/implementation/frontend-p5-status.md`](docs/implementation/frontend-p5-status.md)
 - [`docs/implementation/frontend-p6-status.md`](docs/implementation/frontend-p6-status.md)
 - [`docs/implementation/frontend-p7-status.md`](docs/implementation/frontend-p7-status.md)
+- [`docs/implementation/frontend-p8-status.md`](docs/implementation/frontend-p8-status.md)
+- [`docs/implementation/frontend-p10-status.md`](docs/implementation/frontend-p10-status.md)
+- [`docs/implementation/frontend-p11-status.md`](docs/implementation/frontend-p11-status.md)
+- [`docs/implementation/p12-runtime-status.md`](docs/implementation/p12-runtime-status.md)
 
-The next frontend phase is **FP8 — fulfillment profiles, shipment operations, logistics, and buyer tracking**.
+The remaining delivery phase is **P12/FP12: staging, UAT, provider sandbox, and release evidence**.
 
 ## Approved Stack
 
@@ -61,25 +65,13 @@ packages/
 
 ## Implementation Tracks
 
-Backend/domain records exist for P0–P11, with P12 rehearsal tooling prepared. The frontend pass proceeds as:
-
 ```text
-FP0  Web foundation / design system / app shell             ✅ source baseline
-FP1  Typed API integration / shared states                  ✅ source baseline
-FP2  Identity / sessions / verification / MFA               ✅ source baseline
-FP3  Vendor onboarding / stores / KYC / staff               ✅ source baseline
-FP4  Marketplace catalog / products / media                 ✅ source baseline
-FP5  Inventory / wishlist / cart                            ✅ source baseline
-FP6  Checkout / reservations / orders                       ✅ source baseline
-FP7  Payments                                               ✅ source baseline
-FP8  Logistics / tracking                                   NEXT
-FP9  Returns / refunds / reviews
-FP10 Admin / analytics / promotions / notifications
-FP11 Privacy / accessibility / security / performance
-FP12 End-to-end integration / UAT
+P0-P11 / FP0-FP11  Web, typed API, commerce, operations, and hardening  locally verified
+P12 / FP12         Staging deployment, UAT, provider, and release evidence  open
+P13                Production launch  blocked by P12 evidence
 ```
 
-Source-baseline status does not mean CI/runtime validation has passed. GitHub Actions has been failing before repository jobs are scheduled, so install/lint/typecheck/test/build and browser/staging/provider/PostgreSQL evidence remain pending until a trusted execution run exists.
+On 13 September 2026, local verification passed lint, typecheck, documentation and secret checks, a clean-database noncached test suite, browser checks, production build, migration deployment, and an isolated backup/restore rehearsal. These checks do not certify GitHub Actions, external providers, staging, or production.
 
 ## Local Setup
 
@@ -121,6 +113,7 @@ pnpm db:backup
 pnpm db:restore
 pnpm p12:preflight
 pnpm p12:smoke
+pnpm p12:gate
 ```
 
-Production feature implementation must follow [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md), the frontend engineering standard and the governing ADRs rather than framework defaults.
+Production feature implementation must follow [`docs/implementation/implementation-plan.md`](docs/implementation/implementation-plan.md), the frontend engineering standard, and the governing ADRs.

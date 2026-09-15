@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
 import { API_BASE_URL, apiErrorMessage, authApi } from "../../lib/api";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const { adoptSession } = useSession();
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -31,7 +29,10 @@ export default function RegisterPage() {
         password,
       });
       adoptSession(session);
-      router.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : "/account");
+      // Authentication sets secure cookies on the same origin. Reloading the
+      // destination makes its initial session read use those cookies instead
+      // of retaining the pre-authenticated route tree.
+      window.location.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : "/account");
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not reach the registration service. Try again."));
     } finally {

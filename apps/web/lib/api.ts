@@ -17,7 +17,10 @@ import {
   createWishlistApi,
 } from "@repo/api-client";
 
-export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000").replace(/\/+$/, "");
+// Relative by default: Next.js proxies API routes, keeping secure cookies, OAuth
+// navigation and the hydrated client on one origin. An explicit public API URL
+// remains available for deployments that intentionally use a separate origin.
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 
 export function readCsrfCookie(): string | undefined {
   if (typeof document === "undefined") return undefined;

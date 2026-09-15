@@ -43,12 +43,31 @@ for (const path of requiredFiles) {
   );
 }
 
+function versionResult(command) {
+  // Node's direct Windows spawn does not consistently resolve .cmd shims from
+  // PATH. Route them through cmd.exe, just as an interactive PowerShell run
+  // does. This keeps preflight representative of the Windows CI workstation.
+  const native = process.platform === "win32"
+    ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `${command} --version`], { encoding: "utf8" })
+    : spawnSync(command, ["--version"], { encoding: "utf8" });
+  if (native.status === 0) return { result: native, source: "host" };
+
+  // The staging deployment already requires Docker. PostgreSQL client tools
+  // are available in its pinned Postgres image even when they are not installed
+  // on the developer workstation.
+  if (command === "pg_dump" || command === "pg_restore") {
+    const container = spawnSync("docker", ["run", "--rm", "postgres:17-alpine", command, "--version"], { encoding: "utf8" });
+    if (container.status === 0) return { result: container, source: "postgres:17-alpine container" };
+  }
+  return { result: native, source: "host" };
+}
+
 for (const command of ["docker", "node", "pnpm", "pg_dump", "pg_restore"]) {
-  const result = spawnSync(command, ["--version"], { encoding: "utf8" });
+  const { result, source } = versionResult(command);
   record(
     `command:${command}`,
     result.status === 0,
-    result.status === 0 ? (result.stdout || result.stderr).trim().split("\n")[0] : "not executable",
+    result.status === 0 ? `${(result.stdout || result.stderr).trim().split("\n")[0]} (${source})` : "not executable",
   );
 }
 

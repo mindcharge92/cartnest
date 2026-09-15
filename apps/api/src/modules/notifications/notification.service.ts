@@ -422,6 +422,11 @@ export class NotificationService {
     if (!["FAILED", "QUEUED"].includes(notification.status)) {
       throw new NotificationError("NOTIFICATION_NOT_RETRYABLE", "Notification is not in a retryable state.", 409);
     }
+    const maxAge = notification.templateKey === "auth.password-reset.v1"
+      ? 14 * 60 * 1000 : 23 * 60 * 60 * 1000;
+    if (Date.now() - notification.createdAt.getTime() >= maxAge) {
+      throw new NotificationError("NOTIFICATION_RETRY_EXPIRED", "This message is too old to retry safely. Request a new notification.", 409);
+    }
     await this.database.$transaction(async (tx) => {
       const changed = await tx.notification.updateMany({
         where: {
@@ -430,7 +435,7 @@ export class NotificationService {
           channel: { not: "IN_APP" },
           status: { in: ["FAILED", "QUEUED"] },
         },
-        data: { status: "QUEUED", nextAttemptAt: new Date(), failedAt: null, lastError: null },
+        data: { status: "QUEUED", attempts: 0, nextAttemptAt: new Date(), failedAt: null, lastError: null },
       });
       if (changed.count !== 1) {
         throw new NotificationError(

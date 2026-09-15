@@ -52,6 +52,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   transpilePackages: ["@repo/ui"],
+  async rewrites() {
+    const backend = (process.env.API_PROXY_TARGET ?? "http://127.0.0.1:4000").replace(/\/+$/, "");
+    return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

@@ -1,14 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "../../components/session-provider";
 import { API_BASE_URL, apiErrorMessage, authApi } from "../../lib/api";
 import { safeReturnTo } from "../../lib/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const { adoptSession } = useSession();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +25,9 @@ export default function LoginPage() {
     try {
       const session = await authApi.login({ identifier: identifier.trim(), password });
       adoptSession(session);
-      router.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : returnTo);
+      // See registration: make the authenticated destination establish its
+      // state from the secure same-origin session cookie.
+      window.location.replace(session.mfa.required && !session.mfa.satisfied ? "/mfa" : returnTo);
     } catch (caught) {
       setMessage(apiErrorMessage(caught, "CartNest could not reach the sign-in service. Try again."));
     } finally {

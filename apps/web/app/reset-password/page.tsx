@@ -13,10 +13,12 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get("token");
+    const value = new URLSearchParams(window.location.hash.slice(1)).get("token")
+      ?? new URLSearchParams(window.location.search).get("token");
     if (value) {
       setToken(value);
       setTokenFromUrl(true);
+      window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
 

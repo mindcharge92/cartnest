@@ -1,3 +1,12 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  deepmerge-ts: "8.0.0"
+  js-yaml: "4.3.2"
+  mysql2: "3.23.1"
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true

@@ -208,6 +208,14 @@ export class OrderService {
   ) {}
 
   async checkout(principal: AccessPrincipal, body: CheckoutBodyDto, idempotencyKey: string): Promise<{ statusCode: 200 | 201; order: OrderDto }> {
+    // A committed checkout consumes its cart. Resolve the durable key before
+    // inspecting current cart contents, prices, or expiring shipping quotes.
+    const replay = await this.repository.replayExisting(principal.userId, idempotencyKey, fingerprint(body));
+    if (replay?.kind === "replayed") return { statusCode: 200, order: mapOrder(replay.order) };
+    if (replay?.kind === "idempotency_conflict") {
+      throw new OrderError("IDEMPOTENCY_KEY_REUSED", "This idempotency key was already used with a different checkout request.", 409);
+    }
+    if (replay) throw new OrderError("CHECKOUT_IN_PROGRESS", "This checkout request is already being processed.", 409);
     const draft = await this.repository.getCheckoutDraft(principal.userId);
     if (!draft || draft.lines.length === 0) throw new OrderError("CART_EMPTY", "The active cart is empty.", 409);
     if (draft.lines.some((line) => line.currency !== "NGN")) throw new OrderError("UNSUPPORTED_CURRENCY", "Checkout currently supports NGN only.", 400);

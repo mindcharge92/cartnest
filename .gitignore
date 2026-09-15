@@ -8,6 +8,7 @@ artifacts/
 backups/
 *.dump
 *.tsbuildinfo
+packages/database/src/generated/
 *.log
 npm-debug.log*
 pnpm-debug.log*
