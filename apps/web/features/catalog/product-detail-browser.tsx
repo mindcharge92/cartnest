@@ -218,7 +218,7 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
             <button
               className="productInlineSave"
               type="button"
-              disabled={!selectedVariant || commerceBusy !== null}
+              disabled={!selectedVariant || commerceBusy !== null || sessionStatus !== "authenticated"}
               onClick={() => void saveToWishlist()}
             >
               <Icon name="heart" />
@@ -246,14 +246,14 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
             <div className="optionSelectors">
               {product.options.map((option) => (
                 <fieldset className="optionSelector" key={option.id}>
-                  <div className="optionLegend">
-                    <legend>{option.name}</legend>
+                  <legend className="optionLegend">
+                    <span>{option.name}</span>
                     <span>
                       {selected[option.id]
                         ? option.values.find((value) => value.id === selected[option.id])?.value
                         : "Select an option"}
                     </span>
-                  </div>
+                  </legend>
 
                   <div className="optionValueRow">
                     {option.values.map((value) => {
