@@ -3,6 +3,16 @@ import { createDatabaseClient, isDatabaseReady } from "@repo/database";
 import { createClient } from "redis";
 import { buildHardenedApp } from "./app.hardened.js";
 
+// `pnpm dev` runs from the workspace root, so load the API's local
+// development configuration explicitly rather than relying on the shell to
+// supply it. Existing environment variables still take precedence.
+try {
+  process.loadEnvFile(new URL("../.env", import.meta.url));
+} catch (error) {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  if (code !== "ENOENT") throw error;
+}
+
 const environment = getApiEnvironment();
 const database = environment.databaseUrl
   ? createDatabaseClient({ connectionString: environment.databaseUrl })
