@@ -11,7 +11,9 @@
   --warning: #a15f12;
   --danger: #b42318;
   --danger-soft: #fff0ee;
-  --commerce: #e66a2f;\n  --commerce-soft: #fff1e9;\n  --shadow: 0 12px 32px rgba(20, 42, 27, 0.06);
+  --commerce: #e66a2f;
+  --commerce-soft: #fff1e9;
+  --shadow: 0 12px 32px rgba(20, 42, 27, 0.06);
   --radius-sm: 0.4rem;
   --radius-md: 0.55rem;
   --radius-lg: 0.8rem;
