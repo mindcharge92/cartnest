@@ -47,6 +47,7 @@ export function MarketplaceBrowser() {
       const page = searchParams.get("page") ?? "1";
       const minPriceMinor = searchParams.get("min") ? parseNairaToMinor(searchParams.get("min")!) : null;
       const maxPriceMinor = searchParams.get("max") ? parseNairaToMinor(searchParams.get("max")!) : null;
+
       const query: CatalogQueryDto = {
         ...(searchParams.get("q")?.trim() ? { q: searchParams.get("q")!.trim() } : {}),
         ...(searchParams.get("category") ? { categoryId: searchParams.get("category")! } : {}),
@@ -56,6 +57,7 @@ export function MarketplaceBrowser() {
         page,
         pageSize: "24",
       };
+
       const [categoryResponse, catalogResponse] = await Promise.all([
         catalogApi.listCategories(),
         catalogApi.listCatalog(query),
@@ -74,12 +76,15 @@ export function MarketplaceBrowser() {
   }, [load]);
 
   const labels = useMemo(() => categoryLabels(categories), [categories]);
+  const categoryChips = categories.slice(0, 8);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
+
     const minMinor = minPrice ? parseNairaToMinor(minPrice) : null;
     const maxMinor = maxPrice ? parseNairaToMinor(maxPrice) : null;
+
     if (minPrice && !minMinor) {
       setFormError("Enter a valid minimum price with at most two decimal places.");
       return;
@@ -99,11 +104,28 @@ export function MarketplaceBrowser() {
     if (minPrice) params.set("min", minPrice.replaceAll(",", ""));
     if (maxPrice) params.set("max", maxPrice.replaceAll(",", ""));
     if (sort !== "NEWEST") params.set("sort", sort);
+
     router.push(`/marketplace${params.size ? `?${params.toString()}` : ""}`);
   }
 
   function clearFilters() {
     router.push("/marketplace");
+  }
+
+  function selectCategory(nextCategoryId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextCategoryId) params.set("category", nextCategoryId);
+    else params.delete("category");
+    params.delete("page");
+    router.push(`/marketplace${params.size ? `?${params.toString()}` : ""}`);
+  }
+
+  function changeSort(nextSort: SortValue) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextSort === "NEWEST") params.delete("sort");
+    else params.set("sort", nextSort);
+    params.delete("page");
+    router.push(`/marketplace${params.size ? `?${params.toString()}` : ""}`);
   }
 
   function movePage(nextPage: number) {
@@ -116,12 +138,36 @@ export function MarketplaceBrowser() {
   return (
     <main className="marketplacePage">
       <section className="marketplaceIntro">
-        <div>
-          <p className="eyebrow">CartNest marketplace</p>
-          <h1 className="pageTitle">Find products across Nigerian stores.</h1>
-          <p className="muted">Search one marketplace while each product remains tied to its real store, vendor and variant pricing.</p>
+        <div className="marketplaceIntroRow">
+          <div>
+            <p className="eyebrow">CartNest marketplace</p>
+            <h1 className="marketplaceTitle">Shop products from Nigerian stores.</h1>
+            <p className="marketplaceSubhead">
+              Compare products, discover local stores and keep the real store behind every listing visible.
+            </p>
+          </div>
         </div>
       </section>
+
+      <nav className="categoryRail" aria-label="Marketplace categories">
+        <button
+          className={`categoryChip ${categoryId ? "" : "categoryChipActive"}`}
+          type="button"
+          onClick={() => selectCategory("")}
+        >
+          All products
+        </button>
+        {categoryChips.map((category) => (
+          <button
+            key={category.id}
+            className={`categoryChip ${categoryId === category.id ? "categoryChipActive" : ""}`}
+            type="button"
+            onClick={() => selectCategory(category.id)}
+          >
+            {labels.get(category.id) ?? category.name}
+          </button>
+        ))}
+      </nav>
 
       <section className="marketplaceLayout">
         <aside className="catalogFilters" aria-label="Product filters">
@@ -130,31 +176,35 @@ export function MarketplaceBrowser() {
               <h2>Filter products</h2>
               <button type="button" className="textButton" onClick={clearFilters}>Clear</button>
             </div>
+
             <label className="field">
               Search
               <input value={q} onChange={(event) => setQ(event.target.value)} maxLength={200} placeholder="Product name or description" />
             </label>
+
             <label className="field">
               Category
               <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
                 <option value="">All categories</option>
                 {categories.map((category) => (
-                  <option key={category.id} value={category.id}>{labels.get(category.id) ?? category.name}</option>
+                  <option key={category.id} value={category.id}>
+                    {labels.get(category.id) ?? category.name}
+                  </option>
                 ))}
               </select>
             </label>
+
             <div className="filterPriceGrid">
-              <label className="field">Minimum ₦<input inputMode="decimal" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} placeholder="0.00" /></label>
-              <label className="field">Maximum ₦<input inputMode="decimal" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} placeholder="Any" /></label>
+              <label className="field">
+                Minimum ₦
+                <input inputMode="decimal" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} placeholder="0.00" />
+              </label>
+              <label className="field">
+                Maximum ₦
+                <input inputMode="decimal" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} placeholder="Any" />
+              </label>
             </div>
-            <label className="field">
-              Sort
-              <select value={sort} onChange={(event) => setSort(event.target.value as SortValue)}>
-                <option value="NEWEST">Newest</option>
-                <option value="NAME_ASC">Name A–Z</option>
-                <option value="NAME_DESC">Name Z–A</option>
-              </select>
-            </label>
+
             {formError ? <p className="formMessage formMessageError" role="alert">{formError}</p> : null}
             <button className="primaryButton" type="submit">Apply filters</button>
           </form>
@@ -162,27 +212,61 @@ export function MarketplaceBrowser() {
 
         <section className="catalogResults" aria-live="polite">
           {state === "loading" ? <LoadingState label="Loading marketplace products…" /> : null}
-          {state === "error" ? <ErrorState title="Marketplace unavailable" message={error ?? "Products could not be loaded."} action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>} /> : null}
+          {state === "error" ? (
+            <ErrorState
+              title="Marketplace unavailable"
+              message={error ?? "Products could not be loaded."}
+              action={<button className="secondaryButton" type="button" onClick={() => void load()}>Try again</button>}
+            />
+          ) : null}
+
           {state === "ready" && result ? (
             <>
               <div className="catalogResultHeading">
-                <div>
+                <div className="catalogCount">
                   <strong>{result.pagination.totalItems.toLocaleString()} products</strong>
                   <span>Page {result.pagination.page}{result.pagination.totalPages > 0 ? ` of ${result.pagination.totalPages}` : ""}</span>
                 </div>
+
+                <label className="catalogSort">
+                  Sort
+                  <select value={sort} onChange={(event) => changeSort(event.target.value as SortValue)} aria-label="Sort products">
+                    <option value="NEWEST">Newest</option>
+                    <option value="NAME_ASC">Name A–Z</option>
+                    <option value="NAME_DESC">Name Z–A</option>
+                  </select>
+                </label>
               </div>
+
               {result.items.length === 0 ? (
                 <EmptyState title="No products matched" message="Try clearing a filter, changing the category, or widening the price range." />
               ) : (
                 <div className="catalogGrid">
-                  {result.items.map((product) => <CatalogProductCard key={product.id} product={product} />)}
+                  {result.items.map((product) => (
+                    <CatalogProductCard key={product.id} product={product} />
+                  ))}
                 </div>
               )}
+
               {result.pagination.totalPages > 1 ? (
                 <nav className="pagination" aria-label="Product result pages">
-                  <button className="secondaryButton" type="button" disabled={result.pagination.page <= 1} onClick={() => movePage(result.pagination.page - 1)}>Previous</button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={result.pagination.page <= 1}
+                    onClick={() => movePage(result.pagination.page - 1)}
+                  >
+                    Previous
+                  </button>
                   <span>Page {result.pagination.page} of {result.pagination.totalPages}</span>
-                  <button className="secondaryButton" type="button" disabled={result.pagination.page >= result.pagination.totalPages} onClick={() => movePage(result.pagination.page + 1)}>Next</button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={result.pagination.page >= result.pagination.totalPages}
+                    onClick={() => movePage(result.pagination.page + 1)}
+                  >
+                    Next
+                  </button>
                 </nav>
               ) : null}
             </>
