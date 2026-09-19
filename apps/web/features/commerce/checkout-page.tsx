@@ -218,7 +218,7 @@ export function CheckoutPageContent() {
         <div className="commerceHeaderCopy">
           <p className="eyebrow">Checkout</p>
           <h1 className="pageTitle">Delivery & order</h1>
-          <p className="muted">Enter delivery details, calculate shipping, and create the order. CartNest revalidates price, stock, promotions, tax and delivery on the server.</p>
+          <p className="muted">Add your delivery details, review shipping, then place your order.</p>
         </div>
         <Link className="secondaryButton" href="/cart">← Back to cart</Link>
       </div>
@@ -258,7 +258,7 @@ export function CheckoutPageContent() {
               <div className="sectionHeadingCompact">
                 <div><p className="eyebrow">Step 2</p><h2>Delivery quote</h2></div>
               </div>
-              <p className="muted">Manual-delivery stores use their configured fee. GIGL stores require a receiver station before CartNest can request a delivery price.</p>
+              <p className="muted">Calculate delivery for the stores in your cart. Some orders may need a receiver station.</p>
 
               {stations !== null ? (
                 <label className="field checkoutStationField">GIGL receiver station
@@ -293,7 +293,7 @@ export function CheckoutPageContent() {
             <section className="panel checkoutSection">
               <div className="sectionHeadingCompact"><div><p className="eyebrow">Optional</p><h2>Promotion</h2></div></div>
               <label className="field">Promotion code<input minLength={2} maxLength={64} pattern="[A-Za-z0-9_-]+" value={promotionCode} onChange={(event) => { setPromotionCode(event.target.value); checkoutKey.current = null; }} placeholder="SAVE10" /></label>
-              <p className="fieldHint">The backend revalidates status, dates, limits and minimum-order rules while the order transaction is being created.</p>
+              <p className="fieldHint">Your code will be checked when you place the order.</p>
             </section>
           </div>
 
@@ -305,9 +305,9 @@ export function CheckoutPageContent() {
               <div className="summaryRow"><span>Items subtotal</span><strong>{formatMoney(cart.subtotal)}</strong></div>
               {quoteTotal ? <div className="summaryRow"><span>Quoted delivery</span><strong>{formatMoney(quoteTotal)}</strong></div> : null}
             </div>
-            <p className="fieldHint">The final order total is server-calculated and may also include validated promotion discounts and configured tax. The browser cannot override these amounts.</p>
+            <p className="fieldHint">Your final total, including any discount or tax, is confirmed before payment.</p>
             <button className="primaryButton" type="submit" disabled={busy !== null}>{busy === "order" ? "Creating order…" : "Create order"}</button>
-            <p className="fieldHint">Creating the order reserves variant inventory for 15 minutes. Payment handoff is the next integration phase; order creation itself does not claim payment success.</p>
+            <p className="fieldHint">Items are held for 15 minutes after you place your order. Payment is a separate step.</p>
           </aside>
         </form>
       )}

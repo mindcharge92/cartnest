@@ -25,7 +25,6 @@ export function CatalogProductCard({ product }: Readonly<{ product: CatalogProdu
             <span className="catalogImageFallback" aria-hidden="true">CN</span>
           )}
         </Link>
-        <span className="catalogSave" aria-hidden="true">♡</span>
       </div>
 
       <div className="catalogCardBody">
@@ -39,9 +38,16 @@ export function CatalogProductCard({ product }: Readonly<{ product: CatalogProdu
         </h2>
 
         <div className="catalogCardFooter">
-          <strong>{formatMoney(product.priceFrom)}</strong>
-          <span className="catalogCardVendor">{product.store.vendorDisplayName}</span>
+          <div>
+            <small>From</small>
+            <strong>{formatMoney(product.priceFrom)}</strong>
+          </div>
+          <span className="catalogCardVendor">Sold by {product.store.vendorDisplayName}</span>
         </div>
+
+        <Link className="catalogCardAction" href={`/products/${encodeURIComponent(product.id)}`}>
+          View product <span aria-hidden="true">→</span>
+        </Link>
       </div>
     </article>
   );

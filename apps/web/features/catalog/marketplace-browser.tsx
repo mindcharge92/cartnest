@@ -25,6 +25,7 @@ export function MarketplaceBrowser() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [categoryId, setCategoryId] = useState(searchParams.get("category") ?? "");
@@ -51,6 +52,7 @@ export function MarketplaceBrowser() {
       const query: CatalogQueryDto = {
         ...(searchParams.get("q")?.trim() ? { q: searchParams.get("q")!.trim() } : {}),
         ...(searchParams.get("category") ? { categoryId: searchParams.get("category")! } : {}),
+        ...(searchParams.get("store") ? { storeId: searchParams.get("store")! } : {}),
         ...(minPriceMinor ? { minPriceMinor } : {}),
         ...(maxPriceMinor ? { maxPriceMinor } : {}),
         sort: allowedSort(searchParams.get("sort")),
@@ -77,6 +79,14 @@ export function MarketplaceBrowser() {
 
   const labels = useMemo(() => categoryLabels(categories), [categories]);
   const categoryChips = categories.slice(0, 8);
+  const hasFilters = Boolean(searchParams.get("q") || searchParams.get("category") || searchParams.get("store") || searchParams.get("min") || searchParams.get("max"));
+  const activeFilterLabels = [
+    searchParams.get("q") ? `Search: ${searchParams.get("q")}` : null,
+    searchParams.get("category") ? labels.get(searchParams.get("category")!) ?? "Category" : null,
+    searchParams.get("store") ? "Featured store" : null,
+    searchParams.get("min") ? `From ₦${searchParams.get("min")}` : null,
+    searchParams.get("max") ? `Up to ₦${searchParams.get("max")}` : null,
+  ].filter((label): label is string => Boolean(label));
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -141,9 +151,9 @@ export function MarketplaceBrowser() {
         <div className="marketplaceIntroRow">
           <div>
             <p className="eyebrow">CartNest marketplace</p>
-            <h1 className="marketplaceTitle">Shop products from Nigerian stores.</h1>
+            <h1 className="marketplaceTitle">Explore the marketplace</h1>
             <p className="marketplaceSubhead">
-              Compare products, discover local stores and keep the real store behind every listing visible.
+              Browse products from independent Nigerian stores.
             </p>
           </div>
         </div>
@@ -170,11 +180,14 @@ export function MarketplaceBrowser() {
       </nav>
 
       <section className="marketplaceLayout">
-        <aside className="catalogFilters" aria-label="Product filters">
+        <button className="mobileFilterToggle secondaryButton" type="button" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={() => setFiltersOpen((open) => !open)}>
+          {filtersOpen ? "Hide filters" : "Search and filter"}
+        </button>
+        <aside id="catalog-filters" className={`catalogFilters${filtersOpen ? " catalogFiltersOpen" : ""}`} aria-label="Product filters">
           <form onSubmit={submit}>
             <div className="filterHeading">
               <h2>Filter products</h2>
-              <button type="button" className="textButton" onClick={clearFilters}>Clear</button>
+              {hasFilters ? <button type="button" className="textButton" onClick={clearFilters}>Clear</button> : null}
             </div>
 
             <label className="field">
@@ -206,7 +219,10 @@ export function MarketplaceBrowser() {
             </div>
 
             {formError ? <p className="formMessage formMessageError" role="alert">{formError}</p> : null}
-            <button className="primaryButton" type="submit">Apply filters</button>
+            <div className="filterActions">
+              <button className="primaryButton" type="submit">Show products</button>
+              {hasFilters ? <button className="secondaryButton" type="button" onClick={clearFilters}>Reset all</button> : null}
+            </div>
           </form>
         </aside>
 
@@ -238,8 +254,20 @@ export function MarketplaceBrowser() {
                 </label>
               </div>
 
+              {activeFilterLabels.length > 0 ? (
+                <div className="activeFilters" aria-label="Active filters">
+                  <span>Showing</span>
+                  {activeFilterLabels.map((label) => <strong key={label}>{label}</strong>)}
+                  <button type="button" onClick={clearFilters}>Clear all</button>
+                </div>
+              ) : null}
+
               {result.items.length === 0 ? (
-                <EmptyState title="No products matched" message="Try clearing a filter, changing the category, or widening the price range." />
+                <EmptyState
+                  title={hasFilters ? "No products matched" : "No products published yet"}
+                  message={hasFilters ? "Try clearing a filter, changing the category, or widening the price range." : "Stores have not published listings yet. Please check back soon."}
+                  action={hasFilters ? <button className="secondaryButton" type="button" onClick={clearFilters}>Clear filters</button> : undefined}
+                />
               ) : (
                 <div className="catalogGrid">
                   {result.items.map((product) => (

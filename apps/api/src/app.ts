@@ -29,7 +29,7 @@ import { DefaultCatalogCommerceBoundary } from "./modules/catalog/catalog.public
 import { PrismaCatalogRepository } from "./modules/catalog/catalog.repository.js";
 import { registerCatalogRoutes } from "./modules/catalog/catalog.routes.js";
 import { CatalogService } from "./modules/catalog/catalog.service.js";
-import { R2MediaStorage } from "./modules/catalog/catalog.storage.js";
+import { DevelopmentAssetStorage, R2MediaStorage } from "./modules/catalog/catalog.storage.js";
 import { asInventoryAvailabilityBoundary } from "./modules/inventory/inventory.public.js";
 import { PrismaInventoryRepository } from "./modules/inventory/inventory.repository.js";
 import { registerInventoryRoutes } from "./modules/inventory/inventory.routes.js";
@@ -181,7 +181,9 @@ export function buildApp(
           bucket: environment.r2Bucket,
           publicBaseUrl: environment.r2PublicBaseUrl,
         })
-      : undefined;
+      : environment.nodeEnv === "development"
+        ? new DevelopmentAssetStorage(environment.webBaseUrl)
+        : undefined;
 
   const catalogRepository = database ? new PrismaCatalogRepository(database) : undefined;
   const catalogService =

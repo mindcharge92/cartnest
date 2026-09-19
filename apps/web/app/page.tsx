@@ -1,43 +1,65 @@
 import Link from "next/link";
+import { HomeDiscovery } from "../features/catalog/home-discovery";
+
+const departments = [
+  { name: "Phones & tech", query: "phones", tone: "tech", symbol: "01" },
+  { name: "Fashion", query: "fashion", tone: "fashion", symbol: "02" },
+  { name: "Beauty", query: "beauty", tone: "beauty", symbol: "03" },
+  { name: "Home & living", query: "home", tone: "home", symbol: "04" },
+  { name: "Groceries", query: "groceries", tone: "grocery", symbol: "05" },
+  { name: "Accessories", query: "accessories", tone: "accessory", symbol: "06" },
+] as const;
 
 export default function HomePage() {
   return (
     <main className="marketHome">
-      <section className="heroGrid" aria-labelledby="home-title">
-        <div className="heroCopy">
-          <span className="kicker">Built for Nigerian commerce</span>
-          <h1 className="heroTitle" id="home-title">One marketplace. Many local businesses.</h1>
-          <p className="heroLead">
-            CartNest brings products from independent Nigerian stores into one customer experience,
-            while each business keeps control of its catalog, inventory and fulfillment.
-          </p>
-          <div className="heroActions">
-            <Link className="primaryButton" href="/marketplace">Browse marketplace</Link>
-            <Link className="secondaryButton" href="/vendor">Sell on CartNest</Link>
+      <section className="commerceHero" aria-labelledby="home-title">
+        <div className="commerceHeroContent">
+          <p className="commerceHeroKicker">Discover more. Shop local.</p>
+          <h1 id="home-title">Great finds from businesses across Nigeria.</h1>
+          <p>Explore everyday essentials, standout pieces and new favourites—all from independent stores.</p>
+          <form className="commerceHeroSearch" action="/marketplace">
+            <label className="srOnly" htmlFor="hero-search">What are you looking for?</label>
+            <input id="hero-search" name="q" placeholder="What are you looking for?" />
+            <button type="submit">Search</button>
+          </form>
+          <div className="commerceHeroLinks">
+            <Link href="/marketplace">Shop the marketplace</Link>
+            <Link href="/vendor">Open your store</Link>
           </div>
         </div>
-
-        <aside className="heroPanel" aria-label="Marketplace foundations">
-          <h2>Designed around the way local commerce actually works</h2>
-          <ul className="trustList">
-            <li><span className="trustIcon">₦</span><div><strong>Naira-first checkout</strong><span>Server-calculated pricing, fees, tax and discounts in integer minor units.</span></div></li>
-            <li><span className="trustIcon">↗</span><div><strong>Multiple stores, one cart</strong><span>Orders split cleanly by store without making the customer manage separate checkouts.</span></div></li>
-            <li><span className="trustIcon">✓</span><div><strong>Verified payment state</strong><span>CartNest confirms provider evidence before an order receives fulfillment value.</span></div></li>
-            <li><span className="trustIcon">⌁</span><div><strong>Local fulfillment</strong><span>Provider delivery and vendor-managed delivery share one tracking model.</span></div></li>
-          </ul>
-        </aside>
       </section>
 
-      <section className="featureSection" aria-labelledby="experience-title">
-        <div className="sectionHeading">
-          <h2 id="experience-title">A marketplace with clear ownership.</h2>
-          <p>Buyers get one coherent shopping experience. Vendors operate their own stores. CartNest handles the shared marketplace rules between them.</p>
+      <section className="serviceRibbon" aria-label="CartNest shopping benefits">
+        <div><strong>Shop independent</strong><span>Discover Nigerian businesses</span></div>
+        <div><strong>Clear store ownership</strong><span>Know who fulfils every order</span></div>
+        <div><strong>Order updates</strong><span>Follow purchases in one place</span></div>
+        <div><strong>Secure checkout</strong><span>Prices confirmed before payment</span></div>
+      </section>
+
+      <section className="departmentSection" aria-labelledby="departments-title">
+        <div className="retailSectionHeading">
+          <div><p className="eyebrow">Explore CartNest</p><h2 id="departments-title">Shop by department</h2></div>
+          <Link href="/marketplace">View everything <span aria-hidden="true">→</span></Link>
         </div>
-        <div className="featureGrid">
-          <article className="featureCard"><span className="featureIndex">01</span><h3>For buyers</h3><p>Discover products, keep a wishlist, build a multi-store cart, pay securely and track each shipment from one account.</p></article>
-          <article className="featureCard"><span className="featureIndex">02</span><h3>For businesses</h3><p>Manage stores, products, variants, stock, staff, fulfillment and returns without losing vendor-level ownership boundaries.</p></article>
-          <article className="featureCard"><span className="featureIndex">03</span><h3>For marketplace operations</h3><p>Moderation, payments, refunds, KYC, tax, promotions and customer cases remain auditable from the admin side.</p></article>
+        <div className="departmentGrid">
+          {departments.map((department) => (
+            <Link className={`departmentCard departmentCard--${department.tone}`} href={`/marketplace?q=${department.query}`} key={department.name}>
+              <span className="departmentNumber" aria-hidden="true">{department.symbol}</span>
+              <strong>{department.name}</strong>
+              <span>Explore <i aria-hidden="true">→</i></span>
+            </Link>
+          ))}
         </div>
+      </section>
+
+      <HomeDiscovery />
+
+      <section className="sellerCampaign" aria-labelledby="seller-campaign-title">
+        <p className="eyebrow">Built for ambitious sellers</p>
+        <h2 id="seller-campaign-title">Turn your products into a storefront people remember.</h2>
+        <p>Publish your catalogue, manage inventory and fulfil customer orders from one workspace.</p>
+        <Link className="campaignButton" href="/vendor">Start selling on CartNest <span aria-hidden="true">→</span></Link>
       </section>
     </main>
   );

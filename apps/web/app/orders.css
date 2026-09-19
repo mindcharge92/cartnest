@@ -201,6 +201,11 @@
   .deliveryQuoteRow { align-items: flex-start; }
 }
 
+@media (max-width: 920px) {
+  .checkoutLayout { grid-template-columns: minmax(0, 1fr); }
+  .checkoutSummary { position: static; order: 2; }
+}
+
 
 
 /* Checkout + post-purchase redesign — Phases 5–6 */

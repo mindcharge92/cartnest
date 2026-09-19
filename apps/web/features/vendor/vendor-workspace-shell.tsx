@@ -52,6 +52,12 @@ export function VendorWorkspaceShell({
 
   return (
     <div className="vendorWorkspace">
+      <details className="workspaceMobileMenu">
+        <summary>Workspace menu · {access.vendor.displayName}</summary>
+        <nav aria-label="Mobile vendor navigation">
+          {visibleLinks.map((link) => <Link key={link.href} href={link.href} aria-current={(link.href === root ? pathname === root : pathname.startsWith(link.href)) ? "page" : undefined}>{link.label}</Link>)}
+        </nav>
+      </details>
       <aside className="vendorSidebar" aria-label="Vendor workspace navigation">
         <div className="vendorIdentity">
           <Link className="vendorBackLink" href="/vendor">← Seller home</Link>

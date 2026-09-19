@@ -37,6 +37,37 @@ export interface R2MediaStorageOptions {
   readonly uploadTtlSeconds?: number;
 }
 
+/** Read-only adapter for development seed assets served by the local web app. */
+export class DevelopmentAssetStorage implements MediaStorage {
+  readonly bucket = "cartnest-development-assets";
+  private readonly publicBaseUrl: string;
+
+  constructor(publicBaseUrl: string) {
+    this.publicBaseUrl = publicBaseUrl.replace(/\/+$/, "");
+  }
+
+  async createUploadAuthorization(): Promise<MediaUploadAuthorization> {
+    throw new Error("Development catalogue assets are read-only.");
+  }
+
+  async headObject(): Promise<MediaObjectMetadata | null> {
+    return null;
+  }
+
+  async readObjectPrefix(): Promise<Uint8Array> {
+    return new Uint8Array();
+  }
+
+  async deleteObject(): Promise<void> {
+    throw new Error("Development catalogue assets are read-only.");
+  }
+
+  publicUrl(objectKey: string): string {
+    const safeKey = objectKey.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    return `${this.publicBaseUrl}/${safeKey}`;
+  }
+}
+
 function bytesEqual(bytes: Uint8Array, expected: readonly number[], offset = 0): boolean {
   if (bytes.length < offset + expected.length) return false;
   return expected.every((value, index) => bytes[offset + index] === value);

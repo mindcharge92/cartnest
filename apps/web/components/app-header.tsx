@@ -7,7 +7,7 @@ import { useSession } from "./session-provider";
 
 function Icon({
   name,
-}: Readonly<{ name: "search" | "heart" | "cart" | "user" }>) {
+}: Readonly<{ name: "search" | "heart" | "cart" | "user" | "logout" }>) {
   const paths = {
     search: (
       <>
@@ -29,6 +29,12 @@ function Icon({
       <>
         <circle cx="12" cy="8" r="3.2" />
         <path d="M5.2 20a6.8 6.8 0 0 1 13.6 0" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19H10" />
+        <path d="m14 8 4 4-4 4M18 12H9" />
       </>
     ),
   } as const;
@@ -56,6 +62,7 @@ export function AppHeader() {
   const { session, status, logout, reloadSession } = useSession();
   const marketplaceActive = pathname.startsWith("/marketplace") || pathname.startsWith("/products/");
   const cartActive = pathname.startsWith("/cart") || pathname.startsWith("/checkout");
+  const focusedRoute = ["/checkout", "/login", "/register", "/forgot-password", "/reset-password", "/mfa"].some((route) => pathname.startsWith(route));
   const admin = Boolean(session && ["ADMIN", "SUPER_ADMIN"].includes(session.user.platformRole));
   const [search, setSearch] = useState("");
 
@@ -74,12 +81,13 @@ export function AppHeader() {
   const wishlistHref = status === "authenticated" ? "/wishlist" : "/login";
 
   return (
-    <header className="siteHeader">
+    <header className={`siteHeader${focusedRoute ? " siteHeaderFocused" : ""}`}>
+      {!focusedRoute ? <div className="announcementBar"><span>Shop independent Nigerian businesses</span><Link href="/vendor">Sell on CartNest</Link></div> : null}
       <div className="headerInner">
         <div className="headerMain">
           <Link className="brand" href="/" aria-label="CartNest home">
             <span className="brandMark" aria-hidden="true">C</span>
-            <span>CartNest</span>
+            <span className="brandLockup"><strong>CartNest</strong><small>Shop. Support. Grow.</small></span>
           </Link>
 
           <form className="headerSearch" role="search" onSubmit={submitSearch}>
@@ -101,35 +109,38 @@ export function AppHeader() {
 
         <div className="headerActions">
           <Link
-            className="iconButton"
+            className="iconButton headerActionLink"
             href={wishlistHref}
             aria-current={pathname.startsWith("/wishlist") ? "page" : undefined}
             aria-label="Saved items"
             title="Saved items"
           >
             <Icon name="heart" />
+            <span>Saved</span>
           </Link>
           <Link
-            className="iconButton"
+            className="iconButton headerActionLink"
             href="/cart"
             aria-current={cartActive ? "page" : undefined}
             aria-label="Cart"
             title="Cart"
           >
             <Icon name="cart" />
+            <span>Cart</span>
           </Link>
           <Link
-            className="iconButton accountButton"
+            className="iconButton accountButton headerActionLink"
             href={accountHref}
             aria-current={pathname.startsWith("/account") ? "page" : undefined}
             aria-label={status === "authenticated" ? "Account" : "Sign in"}
             title={status === "authenticated" ? "Account" : "Sign in"}
           >
             <Icon name="user" />
+            <span>{status === "authenticated" ? "Account" : "Sign in"}</span>
           </Link>
           {status === "authenticated" ? (
-            <button className="navButton" type="button" onClick={() => void logout()} aria-label="Sign out">
-              Sign out
+            <button className="navButton signOutButton" type="button" onClick={() => void logout()} aria-label="Sign out">
+              <Icon name="logout" /><span>Sign out</span>
             </button>
           ) : status === "loading" ? (
             <span className="navStatus" aria-live="polite">Checking session…</span>
@@ -146,13 +157,7 @@ export function AppHeader() {
       <div className="categoryNavWrap">
         <nav className="categoryNav" aria-label="Marketplace navigation">
           <Link className="categoryLink" href="/marketplace" aria-current={marketplaceActive ? "page" : undefined}>
-            Categories
-          </Link>
-          <Link className="categoryLink" href="/marketplace">
-            Deals
-          </Link>
-          <Link className="categoryLink" href="/marketplace">
-            Stores
+            Shop all
           </Link>
           <Link className="categoryLink" href="/marketplace?sort=NEWEST">
             New arrivals
@@ -160,6 +165,11 @@ export function AppHeader() {
           <Link className="categoryLink categoryLinkAccent" href="/vendor">
             Sell on CartNest
           </Link>
+          {status === "authenticated" ? (
+            <Link className="categoryLink" href="/orders" aria-current={pathname.startsWith("/orders") ? "page" : undefined}>
+              My orders
+            </Link>
+          ) : null}
           {admin ? (
             <Link className="categoryLink" href="/admin" aria-current={pathname.startsWith("/admin") ? "page" : undefined}>
               Admin

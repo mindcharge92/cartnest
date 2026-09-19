@@ -688,12 +688,7 @@
   .catalogFilters { position: static; }
   .mediaUploadForm { grid-template-columns: 1fr; align-items: stretch; }
   .optionSnapshot, .mediaEditorGrid { grid-template-columns: 1fr; }
-  .productFeatureStrip { grid-template-columns: 1fr; }
-  .productFeatureStrip > div + div {
-    padding-left: 0;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
+  .productFeatureStrip { display: none; }
 }
 
 @media (max-width: 600px) {

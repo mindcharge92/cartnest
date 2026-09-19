@@ -43,10 +43,10 @@ export default function RegisterPage() {
   return (
     <main className="authShell">
       <form className="authCard" onSubmit={submit}>
-        <div className="authHeader"><p className="eyebrow">Join CartNest</p><h1 className="authTitle">Create account</h1><p className="muted">Start as a buyer. The same identity can later join or own vendor businesses without creating a second account.</p></div>
+        <div className="authHeader"><p className="eyebrow">Join CartNest</p><h1 className="authTitle">Create account</h1><p className="muted">Shop from local stores with one account. You can also use it to sell later.</p></div>
         <label className="field">Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /><span className="fieldHint">Optional when a phone number is supplied.</span></label>
         <label className="field">Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" placeholder="+234…" /><span className="fieldHint">Use an international-format number where possible.</span></label>
-        <label className="field">Password<input type="password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required /><span className="fieldHint">Use at least 12 characters. Backend password policy remains authoritative.</span></label>
+        <label className="field">Password<input type="password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required /><span className="fieldHint">Use at least 12 characters.</span></label>
         {message ? <p className="formMessage formMessageError" role="alert">{message}</p> : null}
         <button className="primaryButton" type="submit" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
         <div className="authDivider">or</div>

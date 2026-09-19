@@ -240,8 +240,6 @@ export function ProductDetailBrowser({ productId }: Readonly<{ productId: string
             <span>Current variant price</span>
           </div>
 
-          <p className="productDescription">{product.description}</p>
-
           {product.options.length > 0 ? (
             <div className="optionSelectors">
               {product.options.map((option) => (

@@ -25,6 +25,16 @@ export function AdminConsole() {
 
   return (
     <main className="adminConsole">
+      <label className="adminMobileSection">
+        Admin section
+        <select value={section} onChange={(event) => setSection(event.target.value as AdminSection)}>
+          <option value="overview">Overview</option>
+          <option value="orders">Order operations</option>
+          <option value="commercial">Tax & promotions</option>
+          <option value="notifications">Notifications</option>
+          <option value="privacy">Privacy</option>
+        </select>
+      </label>
       <aside className="adminSidebar" aria-label="Admin operations navigation">
         <div className="adminIdentity">
           <span className="adminMark" aria-hidden="true">CN</span>
