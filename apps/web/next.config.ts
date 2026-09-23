@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const production = process.env.NODE_ENV === "production";
+// Docker images run `next start` directly and need the compact standalone
+// bundle. Vercel packages Next.js output itself; enabling standalone there
+// makes its build adapter look for a trace manifest Next.js 16 does not emit.
+const deploymentOutput = process.env.VERCEL ? {} : { output: "standalone" as const };
 
 function apiOrigin(): string | undefined {
   const value = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -48,7 +52,7 @@ const sensitiveHeaders = [
 const sensitiveRoutes = ["/account/:path*", "/admin/:path*", "/notifications/:path*", "/checkout/:path*", "/orders/:path*", "/returns/:path*", "/vendor/:path*"];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...deploymentOutput,
   poweredByHeader: false,
   reactStrictMode: true,
   transpilePackages: ["@repo/ui"],
