@@ -164,7 +164,9 @@ export function buildApp(
     ? new AuthService(new PrismaAuthRepository(database), environment, emailSender ? notificationDelivery : undefined)
     : undefined;
   const vendorService = database
-    ? new VendorService(new PrismaVendorRepository(database))
+    ? new VendorService(new PrismaVendorRepository(database), {
+        requireVerifiedIdentifier: environment.vendorRequireVerifiedIdentifier,
+      })
     : undefined;
   const vendorBoundary = vendorService ? asVendorOwnershipBoundary(vendorService) : undefined;
 
