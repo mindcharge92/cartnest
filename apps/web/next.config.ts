@@ -57,7 +57,14 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@repo/ui"],
   async rewrites() {
-    const backend = (process.env.API_PROXY_TARGET ?? "http://127.0.0.1:4000").replace(/\/+$/, "");
+    // Vercel evaluates rewrite destinations while building its routing manifest.
+    // Keep the configurable target for other hosts, but provide CartNest's
+    // deployed API as the Vercel fallback so clients always stay on this
+    // origin for cookie-based authentication.
+    const defaultBackend = process.env.VERCEL
+      ? "https://cartnest-api-3j8g.onrender.com"
+      : "http://127.0.0.1:4000";
+    const backend = (process.env.API_PROXY_TARGET ?? defaultBackend).replace(/\/+$/, "");
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },
   async headers() {
