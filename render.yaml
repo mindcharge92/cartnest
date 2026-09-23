@@ -1,8 +1,10 @@
-# Free testing profile. Sleeps when idle; database expires after 30 days.
-# Do not enable live payments or describe this as production certified.
+# Preview API profile. The Next.js storefront is deployed separately to Vercel.
+# Supabase PostgreSQL is configured manually as DATABASE_URL and is never committed.
+# The API and worker intentionally share this free Render web instance because
+# Render's free tier has no dedicated background-worker service.
 services:
   - type: web
-    name: cartnest-preview
+    name: cartnest-api
     runtime: docker
     plan: free
     region: frankfurt
@@ -16,6 +18,8 @@ services:
         sync: false
       - key: API_PUBLIC_BASE_URL
         sync: false
+      - key: CORS_ORIGINS
+        sync: false
       - key: AUTH_JWT_SECRET
         generateValue: true
       - key: MFA_ENCRYPTION_KEY
@@ -23,9 +27,7 @@ services:
       - key: AUTH_COOKIE_SECURE
         value: "true"
       - key: DATABASE_URL
-        fromDatabase:
-          name: cartnest-preview-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -36,11 +38,4 @@ services:
     plan: free
     region: frankfurt
     maxmemoryPolicy: noeviction
-    ipAllowList: []
-databases:
-  - name: cartnest-preview-db
-    plan: free
-    region: frankfurt
-    databaseName: cartnest
-    user: cartnest
     ipAllowList: []
