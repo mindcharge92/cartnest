@@ -134,8 +134,19 @@ function toProviderAccount(record: ProviderAccountRecord): PaymentProviderAccoun
   };
 }
 
+export interface VendorServiceOptions {
+  readonly requireVerifiedIdentifier?: boolean;
+}
+
 export class VendorService {
-  constructor(private readonly repository: VendorRepository) {}
+  private readonly requireVerifiedIdentifier: boolean;
+
+  constructor(
+    private readonly repository: VendorRepository,
+    options: VendorServiceOptions = {},
+  ) {
+    this.requireVerifiedIdentifier = options.requireVerifiedIdentifier ?? true;
+  }
 
   private async membershipFor(principal: AccessPrincipal, vendorId: string): Promise<VendorMembershipRecord> {
     const membership = await this.repository.findMembership(vendorId, principal.userId);
@@ -174,7 +185,7 @@ export class VendorService {
   ): Promise<VendorAccessDto> {
     const user = await this.repository.findUserIdentity(principal.userId);
     if (!user) throw new VendorError("USER_NOT_FOUND", "User account was not found.", 404);
-    if (!user.emailVerifiedAt && !user.phoneVerifiedAt) {
+    if (this.requireVerifiedIdentifier && !user.emailVerifiedAt && !user.phoneVerifiedAt) {
       throw new VendorError(
         "VERIFIED_IDENTIFIER_REQUIRED",
         "Verify an email address or phone number before applying as a vendor.",
