@@ -33,6 +33,12 @@ services:
           type: keyvalue
           name: cartnest-preview-queue
           property: connectionString
+      # Required for verification and password-reset email delivery. Configure
+      # these as secrets in Render; do not commit their values.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
   - type: keyvalue
     name: cartnest-preview-queue
     plan: free

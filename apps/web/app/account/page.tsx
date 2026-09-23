@@ -47,7 +47,7 @@ function AccountPanel() {
       </dl>
       <div className="actionRow">
         {session.user.email && !session.user.emailVerified ? <button className="secondaryButton" type="button" disabled={busy !== null} onClick={() => void requestVerification("email")}>{busy === "email" ? "Requesting…" : "Verify email"}</button> : null}
-        {session.user.phone && !session.user.phoneVerified ? <button className="secondaryButton" type="button" disabled={busy !== null} onClick={() => void requestVerification("phone")}>{busy === "phone" ? "Requesting…" : "Verify phone"}</button> : null}
+        {session.user.phone && !session.user.phoneVerified ? <p className="muted">Phone verification is not available yet. Verify your email to secure this account.</p> : null}
         <Link className="secondaryButton" href="/verify">Enter verification token</Link>
         <Link className="secondaryButton" href="/mfa">MFA settings</Link>
         <a className="secondaryButton" href={`${API_BASE_URL}/api/v1/auth/google/start?intent=link`}>Link Google</a>
