@@ -23,6 +23,7 @@ export interface ApiEnvironment {
   readonly googleClientSecret: string | undefined;
   readonly googleRedirectUri: string;
   readonly exposeDevelopmentAuthTokens: boolean;
+  readonly vendorRequireVerifiedIdentifier: boolean;
   readonly r2AccountId: string | undefined;
   readonly r2AccessKeyId: string | undefined;
   readonly r2SecretAccessKey: string | undefined;
@@ -78,6 +79,7 @@ export function getApiEnvironment(source: NodeJS.ProcessEnv = process.env): ApiE
     googleClientSecret: readString(source, "GOOGLE_CLIENT_SECRET"),
     googleRedirectUri,
     exposeDevelopmentAuthTokens: readBoolean(source, "AUTH_EXPOSE_DEVELOPMENT_TOKENS", false),
+    vendorRequireVerifiedIdentifier: readBoolean(source, "VENDOR_REQUIRE_VERIFIED_IDENTIFIER", true),
     r2AccountId: readString(source, "R2_ACCOUNT_ID"),
     r2AccessKeyId: readString(source, "R2_ACCESS_KEY_ID"),
     r2SecretAccessKey: readString(source, "R2_SECRET_ACCESS_KEY"),
