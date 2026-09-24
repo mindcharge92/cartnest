@@ -340,6 +340,19 @@ export function buildApp(
     registerNotificationRoutes(routes, { service: notificationService, authService });
 
     routes.get(
+      "/",
+      {
+        schema: { hide: true },
+      },
+      async () => ({
+        status: "ok" as const,
+        service: "cartnest-api" as const,
+        health: "/health" as const,
+        readiness: "/ready" as const,
+      }),
+    );
+
+    routes.get(
       "/health",
       {
         schema: {
