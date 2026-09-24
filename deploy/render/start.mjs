@@ -56,7 +56,7 @@ function startBootstrapServer() {
       response.setHeader("content-type", "application/json; charset=utf-8");
       response.setHeader("cache-control", "no-store");
 
-      if (request.url === "/health" || request.url === "/") {
+      if (request.url === "/health" || request.url === "/api/health" || request.url === "/") {
         response.statusCode = 200;
         response.end(JSON.stringify({
           status: "starting",
