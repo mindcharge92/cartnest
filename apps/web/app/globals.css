@@ -811,3 +811,236 @@ input:focus, textarea:focus, select:focus { border-color: var(--brand); outline:
   .mfaActionRow > * { width: 100%; }
   .mfaCodeField input { min-height: 3.4rem; font-size: 1.15rem; }
 }
+
+
+/* SUPER_ADMIN user management */
+.adminUsersHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.adminUsersHeading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.adminUsersHeading p:not(.eyebrow) {
+  max-width: 48rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.adminUsersSecurityNote {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  border: 1px solid #ead9b9;
+  border-radius: var(--radius-md);
+  background: #fffaf0;
+  padding: 0.9rem 1rem;
+}
+.adminUsersSecurityIcon {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f6e8c8;
+  color: #8a5a10;
+  font-weight: 900;
+}
+.adminUsersSecurityNote strong {
+  color: #604513;
+  font-size: 0.8rem;
+}
+.adminUsersSecurityNote p {
+  margin: 0.2rem 0 0;
+  color: #765f34;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.adminUsersToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.28fr);
+  gap: 0.8rem;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 0.9rem;
+}
+.adminUsersSearchRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+.adminUsersSearchRow .secondaryButton { min-height: 2.9rem; }
+.adminUsersActiveFilters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+}
+.adminUsersClearButton {
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+.adminUsersClearButton:hover { text-decoration: underline; }
+.adminRoleConfirmation {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  border: 1px solid #bfd8c5;
+  border-radius: var(--radius-md);
+  background: #f3f9f4;
+  padding: 1rem;
+}
+.adminRoleConfirmation h3 {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+}
+.adminRoleConfirmation p {
+  max-width: 50rem;
+  margin: 0.35rem 0 0;
+  color: #52665a;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+.adminUsersTableWrap {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.adminUsersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+.adminUsersTable th {
+  padding: 0.72rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  background: #f7f9f6;
+  color: var(--text-soft);
+  text-align: left;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.adminUsersTable td {
+  padding: 0.8rem;
+  border-bottom: 1px solid #edf0ec;
+  vertical-align: middle;
+}
+.adminUsersTable tbody tr:last-child td { border-bottom: 0; }
+.adminUsersTable tbody tr:hover { background: #fbfcfa; }
+.adminUserIdentityCell {
+  min-width: 12rem;
+  display: grid;
+  gap: 0.12rem;
+}
+.adminUserIdentityCell strong {
+  max-width: 19rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.77rem;
+}
+.adminUserIdentityCell span {
+  color: var(--text-soft);
+  font-size: 0.67rem;
+}
+.adminUserIdentityCell small {
+  width: fit-content;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  padding: 0.14rem 0.38rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.adminRoleBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.55rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  background: var(--surface-muted);
+  color: #4c5b51;
+  font-size: 0.65rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.adminRoleBadgeADMIN {
+  background: #edf3ff;
+  color: #315a9b;
+}
+.adminRoleBadgeSUPERADMIN {
+  background: #efe8ff;
+  color: #6840a1;
+}
+.adminRoleSelect {
+  min-width: 8.5rem;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.5rem;
+  font-size: 0.72rem;
+}
+.adminRoleSaveButton {
+  min-height: 2.3rem !important;
+  padding: 0.4rem 0.65rem !important;
+  font-size: 0.69rem;
+}
+.adminUsersEmpty {
+  padding: 2rem 1rem;
+  text-align: center;
+}
+.adminUsersEmpty strong { display: block; font-size: 0.9rem; }
+.adminUsersEmpty p {
+  margin: 0.3rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+.adminUsersPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+.adminUsersPagination .secondaryButton {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 900px) {
+  .adminUsersTableWrap { overflow-x: auto; }
+  .adminUsersTable { min-width: 47rem; }
+}
+@media (max-width: 680px) {
+  .adminUsersHeading,
+  .adminRoleConfirmation,
+  .adminUsersPagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .adminUsersToolbar { grid-template-columns: 1fr; }
+  .adminUsersSearchRow { grid-template-columns: 1fr; }
+  .adminUsersSearchRow .secondaryButton { width: 100%; }
+  .adminUsersActiveFilters { align-items: flex-start; flex-direction: column; gap: 0.4rem; }
+  .adminRoleConfirmation .actionRow > * { flex: 1; }
+}
