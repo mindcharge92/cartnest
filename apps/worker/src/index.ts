@@ -50,9 +50,50 @@ const scheduler = startWorkerScheduler(
   (error) => logError("CartNest scheduler could not enqueue maintenance work", error),
 );
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isTransientDatabaseError(error: unknown): boolean {
+  return /(unable to start a transaction|transaction api error|timed? ?out|timeout|connection.*(?:closed|reset|refused)|ECONNRESET|ETIMEDOUT|P1001|P2024)/i.test(
+    errorMessage(error),
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function dispatchOutboxWithRetry() {
+  const retryDelaysMs = [350, 1_000] as const;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      return await dispatcher.dispatchOnce();
+    } catch (error) {
+      lastError = error;
+      const canRetry = attempt < retryDelaysMs.length && isTransientDatabaseError(error);
+      if (!canRetry) throw error;
+
+      const delayMs = retryDelaysMs[attempt] ?? 1_000;
+      console.warn(JSON.stringify({
+        level: "warn",
+        message: "CartNest outbox claim hit a transient database error; retrying",
+        attempt: attempt + 1,
+        delayMs,
+        error: errorMessage(error).slice(0, 500),
+      }));
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
+}
+
 async function runOutbox(): Promise<void> {
   try {
-    const result = await dispatcher.dispatchOnce();
+    const result = await dispatchOutboxWithRetry();
     recordOutboxRun(result);
     if (result.claimed > 0) {
       console.info(JSON.stringify({ level: "info", message: "CartNest outbox dispatch", ...result }));
