@@ -1,13 +1,25 @@
 FROM node:24.20.0-bookworm-slim
+
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 COPY . .
-RUN pnpm install --frozen-lockfile --prod=false --fetch-retries=5 --fetch-timeout=600000 --network-concurrency=8 && pnpm build
+
+# Render hosts only the API + worker. The storefront is built/deployed by
+# Vercel, so avoid compiling or running a second Next.js application here.
+RUN pnpm install --frozen-lockfile --prod=false --fetch-retries=5 --fetch-timeout=600000 --network-concurrency=8 \
+  && pnpm exec turbo run build --filter=@cartnest/api --filter=@cartnest/worker
+
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 ENV PORT=10000
-ENV API_PROXY_TARGET=http://127.0.0.1:4000
+
 EXPOSE 10000
+
 CMD ["node", "deploy/render/start.mjs"]
