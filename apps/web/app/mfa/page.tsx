@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AuthGuard } from "../../components/auth-guard";
 import { useSession } from "../../components/session-provider";
 import { apiErrorMessage, authApi } from "../../lib/api";
@@ -15,7 +15,7 @@ function SetupStep({
 }: Readonly<{
   number: number;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <li className="mfaSetupStep">
