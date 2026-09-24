@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PlatformRoleDto } from "@repo/contracts";
 import type { DatabaseClient } from "@repo/database";
 import type { AccessPrincipal } from "../auth/auth.public.js";
 import type { VendorOwnershipBoundary } from "../vendors/vendor.public.js";
@@ -17,7 +18,22 @@ const admin: AccessPrincipal = {
   platformRole: "ADMIN",
 };
 
-const target = {
+type TestUser = {
+  id: string;
+  email: string | null;
+  normalizedEmail: string | null;
+  phone: string | null;
+  normalizedPhone: string | null;
+  passwordHash: string | null;
+  emailVerifiedAt: Date | null;
+  phoneVerifiedAt: Date | null;
+  status: "PENDING_VERIFICATION" | "ACTIVE" | "SUSPENDED" | "DISABLED";
+  platformRole: PlatformRoleDto;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const target: TestUser = {
   id: "123e4567-e89b-12d3-a456-426614174010",
   email: "member@example.com",
   normalizedEmail: "member@example.com",
@@ -33,7 +49,7 @@ const target = {
 };
 
 function serviceWith(overrides?: {
-  existing?: typeof target | null;
+  existing?: TestUser | null;
   superAdminCount?: number;
 }) {
   const existing = overrides && "existing" in overrides ? overrides.existing : target;
