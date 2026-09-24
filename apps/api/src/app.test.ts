@@ -20,6 +20,21 @@ describe("system endpoints", () => {
     expect(response.json()).toMatchObject({ status: "ok", service: "cartnest-api" });
   });
 
+  it("keeps the legacy Render health path healthy", async () => {
+    const app = buildApp({ logger: false });
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/health" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "ok", service: "cartnest-api" });
+  });
+
+  it("answers root HEAD probes without a 404", async () => {
+    const app = buildApp({ logger: false });
+    apps.push(app);
+    const response = await app.inject({ method: "HEAD", url: "/" });
+    expect(response.statusCode).toBe(200);
+  });
+
   it("reports ready only when database and Redis probes succeed", async () => {
     const app = buildApp({ logger: false }, readyProbes);
     apps.push(app);
