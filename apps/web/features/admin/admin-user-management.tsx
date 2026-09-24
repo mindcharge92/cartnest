@@ -350,7 +350,7 @@ export function AdminUserManagement() {
             <button
               className="secondaryButton"
               type="button"
-              disabled={page <= 1 || state === "loading"}
+              disabled={page <= 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
             >
               Previous
@@ -358,7 +358,7 @@ export function AdminUserManagement() {
             <button
               className="secondaryButton"
               type="button"
-              disabled={page >= pagination.totalPages || state === "loading"}
+              disabled={page >= pagination.totalPages}
               onClick={() => setPage((current) => current + 1)}
             >
               Next
