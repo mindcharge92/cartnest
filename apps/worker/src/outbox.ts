@@ -72,7 +72,7 @@ export class OutboxDispatcher {
 
   private async claimBatch(): Promise<ClaimedOutboxEvent[]> {
     const staleBefore = new Date(Date.now() - this.options.lockTimeoutMs);
-    return this.database.$transaction(async (tx) => tx.$queryRaw<ClaimedOutboxEvent[]>(Prisma.sql`
+    return this.database.$queryRaw<ClaimedOutboxEvent[]>(Prisma.sql`
       WITH candidates AS (
         SELECT "id"
         FROM "OutboxEvent"
@@ -112,7 +112,7 @@ export class OutboxDispatcher {
         event."attempts",
         event."lockedAt",
         event."createdAt"
-    `));
+    `);
   }
 
   private leaseWhere(event: ClaimedOutboxEvent) {
