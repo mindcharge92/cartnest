@@ -1,6 +1,8 @@
 import type {
   AdminListQueryDto,
   AdminOrderListResponseDto,
+  AdminUserListQueryDto,
+  AdminUserSummaryDto,
   AdminOrderOperationsDetailDto,
   AdminPaymentListResponseDto,
   AdminRefundListResponseDto,
@@ -13,6 +15,7 @@ import type {
   PromotionListResponseDto,
   PromotionStatusDto,
   StoreAnalyticsDto,
+  PlatformRoleDto,
   TaxRateDto,
   TaxRateListResponseDto,
 } from "@repo/contracts";
@@ -36,7 +39,8 @@ function withQuery(path: string, query: object): string {
 export interface AdminApi {
   getPlatformAnalytics(query?: AnalyticsRangeQueryDto): Promise<PlatformAnalyticsDto>;
   getStoreAnalytics(storeId: string, query?: AnalyticsRangeQueryDto): Promise<StoreAnalyticsDto>;
-  listUsers(query?: AdminListQueryDto): Promise<AdminUserListResponseDto>;
+  listUsers(query?: AdminUserListQueryDto): Promise<AdminUserListResponseDto>;
+  setUserRole(userId: string, role: PlatformRoleDto): Promise<AdminUserSummaryDto>;
   listOrders(query?: AdminListQueryDto): Promise<AdminOrderListResponseDto>;
   getOrderOperations(orderId: string): Promise<AdminOrderOperationsDetailDto>;
   listPayments(query?: AdminListQueryDto): Promise<AdminPaymentListResponseDto>;
@@ -59,6 +63,12 @@ export function createAdminApi(client: ContractRequestClient): AdminApi {
     },
     listUsers(query = {}) {
       return client.request<AdminUserListResponseDto>(withQuery("/api/v1/admin/users", query));
+    },
+    setUserRole(userId, role) {
+      return client.request<AdminUserSummaryDto>(`/api/v1/admin/users/${pathSegment(userId)}/role`, {
+        method: "PATCH",
+        body: { role },
+      });
     },
     listOrders(query = {}) {
       return client.request<AdminOrderListResponseDto>(withQuery("/api/v1/admin/orders", query));
