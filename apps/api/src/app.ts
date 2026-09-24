@@ -368,6 +368,20 @@ export function buildApp(
       }),
     );
 
+    // Compatibility liveness path for existing Render services created before
+    // the direct-Fastify deployment switched the canonical health path to /health.
+    routes.get(
+      "/api/health",
+      {
+        schema: { hide: true },
+      },
+      async () => ({
+        status: "ok" as const,
+        service: "cartnest-api" as const,
+        uptimeSeconds: Math.floor(process.uptime()),
+      }),
+    );
+
     routes.get(
       "/ready",
       {
