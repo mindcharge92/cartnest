@@ -1,9 +1,12 @@
 import type {
   AdminListQueryDto,
+  AdminUserListQueryDto,
+  AdminUserSummaryDto,
   AnalyticsRangeQueryDto,
   CreatePromotionBodyDto,
   CreateTaxRateBodyDto,
   PlatformAnalyticsDto,
+  PlatformRoleDto,
   PromotionDto,
   StoreAnalyticsDto,
   TaxRateDto,
@@ -52,6 +55,24 @@ function isNotFound(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "P2025");
 }
 
+function mapAdminUser(record: {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  status: "PENDING_VERIFICATION" | "ACTIVE" | "SUSPENDED" | "DISABLED";
+  platformRole: "USER" | "ADMIN" | "SUPER_ADMIN";
+  createdAt: Date;
+}): AdminUserSummaryDto {
+  return {
+    id: record.id,
+    email: record.email,
+    phone: record.phone,
+    status: record.status,
+    platformRole: record.platformRole,
+    createdAt: record.createdAt.toISOString(),
+  };
+}
+
 function mapTaxRate(record: {
   id: string; name: string; rateBps: number; active: boolean; startsAt: Date; endsAt: Date | null; createdAt: Date; updatedAt: Date;
 }): TaxRateDto {
@@ -98,6 +119,11 @@ export class AdminService {
 
   private requireAdmin(principal: AccessPrincipal): void {
     requirePlatformRole(principal, ["ADMIN", "SUPER_ADMIN"]);
+    requirePrivilegedMfa(principal);
+  }
+
+  private requireSuperAdmin(principal: AccessPrincipal): void {
+    requirePlatformRole(principal, ["SUPER_ADMIN"]);
     requirePrivilegedMfa(principal);
   }
 
@@ -174,15 +200,95 @@ export class AdminService {
     };
   }
 
-  async listUsers(principal: AccessPrincipal, query: AdminListQueryDto) {
+  async listUsers(principal: AccessPrincipal, query: AdminUserListQueryDto) {
     this.requireAdmin(principal);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const search = query.search?.trim();
+    const where = {
+      ...(query.role ? { platformRole: query.role } : {}),
+      ...(search
+        ? {
+            OR: [
+              { email: { contains: search, mode: "insensitive" as const } },
+              { phone: { contains: search, mode: "insensitive" as const } },
+              { normalizedEmail: { contains: search.toLowerCase(), mode: "insensitive" as const } },
+              { normalizedPhone: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
     const [items, totalItems] = await Promise.all([
-      this.database.user.findMany({ orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
-      this.database.user.count(),
+      this.database.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.user.count({ where }),
     ]);
-    return { items: items.map((item) => ({ id: item.id, email: item.email, phone: item.phone, status: item.status, platformRole: item.platformRole, createdAt: item.createdAt.toISOString() })), pagination: pagination(page, pageSize, totalItems) };
+    return { items: items.map(mapAdminUser), pagination: pagination(page, pageSize, totalItems) };
+  }
+
+  async setUserPlatformRole(
+    principal: AccessPrincipal,
+    userId: string,
+    role: PlatformRoleDto,
+    requestId?: string,
+  ): Promise<AdminUserSummaryDto> {
+    this.requireSuperAdmin(principal);
+
+    if (principal.userId === userId) {
+      throw new AdminError(
+        "SELF_ROLE_CHANGE_FORBIDDEN",
+        "Use another SUPER_ADMIN account to change your own platform role.",
+        409,
+      );
+    }
+
+    const existing = await this.database.user.findUnique({ where: { id: userId } });
+    if (!existing) throw new AdminError("USER_NOT_FOUND", "User account was not found.", 404);
+    if (existing.platformRole === role) return mapAdminUser(existing);
+
+    const now = new Date();
+    return this.database.$transaction(async (tx) => {
+      if (existing.platformRole === "SUPER_ADMIN" && role !== "SUPER_ADMIN") {
+        const superAdminCount = await tx.user.count({ where: { platformRole: "SUPER_ADMIN" } });
+        if (superAdminCount <= 1) {
+          throw new AdminError(
+            "LAST_SUPER_ADMIN_REQUIRED",
+            "CartNest must retain at least one SUPER_ADMIN account.",
+            409,
+          );
+        }
+      }
+
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { platformRole: role },
+      });
+
+      await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now, revokedReason: "platform-role-changed" },
+      });
+
+      await writeAuditEntry(tx, {
+        actorType: "USER",
+        actorUserId: principal.userId,
+        action: "admin.user.role_changed",
+        entityType: "User",
+        entityId: userId,
+        ...(requestId ? { requestId } : {}),
+        metadata: {
+          previousRole: existing.platformRole,
+          newRole: role,
+          sessionsRevoked: true,
+        },
+      });
+
+      return mapAdminUser(updated);
+    });
   }
 
   async listOrders(principal: AccessPrincipal, query: AdminListQueryDto) {
