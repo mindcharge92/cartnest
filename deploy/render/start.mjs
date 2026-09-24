@@ -56,7 +56,7 @@ function startBootstrapServer() {
       response.setHeader("content-type", "application/json; charset=utf-8");
       response.setHeader("cache-control", "no-store");
 
-      if (request.url === "/health" || request.url === "/api/health" || request.url === "/") {
+      if (request.url === "/") {
         response.statusCode = 200;
         response.end(JSON.stringify({
           status: "starting",
@@ -66,9 +66,14 @@ function startBootstrapServer() {
         return;
       }
 
+      // Keep the port open for Render's scanner, but do not report the service
+      // healthy until migrations finish and Fastify has taken over the port.
       response.statusCode = 503;
       response.setHeader("retry-after", "5");
       response.end(JSON.stringify({
+        status: "starting",
+        service: "cartnest-api",
+        phase: "database-migrations",
         error: {
           code: "SERVICE_STARTING",
           message: "CartNest is finishing startup tasks. Retry shortly.",
