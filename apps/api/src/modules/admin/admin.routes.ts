@@ -3,7 +3,10 @@ import {
   AdminListQuerySchema,
   AdminOrderListResponseSchema,
   AdminPaymentListResponseSchema,
+  AdminUserIdParamsSchema,
+  AdminUserListQuerySchema,
   AdminUserListResponseSchema,
+  AdminUserSummarySchema,
   AnalyticsRangeQuerySchema,
   ApiErrorSchema,
   CreatePromotionBodySchema,
@@ -17,6 +20,7 @@ import {
   TaxRateIdParamsSchema,
   TaxRateListResponseSchema,
   TaxRateSchema,
+  UpdateAdminUserRoleBodySchema,
   UpdatePromotionStatusBodySchema,
   UpdateTaxRateBodySchema,
 } from "@repo/contracts";
@@ -88,11 +92,34 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
   });
 
   server.get("/api/v1/admin/users", {
-    schema: { tags: ["admin"], operationId: "listAdminUsers", querystring: AdminListQuerySchema, response: { 200: AdminUserListResponseSchema, ...commonErrors } },
+    schema: { tags: ["admin"], operationId: "listAdminUsers", querystring: AdminUserListQuerySchema, response: { 200: AdminUserListResponseSchema, ...commonErrors } },
   }, async (request, reply) => {
     try {
       const principal = await requireAccessPrincipal(request, authServiceOrThrow(options.authService));
       return reply.send(await adminServiceOrThrow(options.service).listUsers(principal, request.query));
+    } catch (error) { return sendError(request, reply, error); }
+  });
+
+  server.patch("/api/v1/admin/users/:userId/role", {
+    schema: {
+      tags: ["admin"],
+      operationId: "updateAdminUserRole",
+      params: AdminUserIdParamsSchema,
+      body: UpdateAdminUserRoleBodySchema,
+      response: { 200: AdminUserSummarySchema, ...commonErrors },
+    },
+  }, async (request, reply) => {
+    try {
+      requireCsrfToken(request);
+      const principal = await requireAccessPrincipal(request, authServiceOrThrow(options.authService));
+      return reply.send(
+        await adminServiceOrThrow(options.service).setUserPlatformRole(
+          principal,
+          request.params.userId,
+          request.body.role,
+          request.id,
+        ),
+      );
     } catch (error) { return sendError(request, reply, error); }
   });
 
