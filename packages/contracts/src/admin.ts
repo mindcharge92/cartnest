@@ -2,6 +2,7 @@ import { Type, type Static } from "typebox";
 import { IsoTimestampSchema, MoneySchema, PaginationMetaSchema, UuidSchema } from "./common.js";
 import { OrderStatusSchema, PaymentStatusSchema } from "./orders.js";
 import { RefundStatusSchema } from "./returns.js";
+import { PlatformRoleSchema, UserStatusSchema } from "./auth.js";
 
 export const PromotionTypeSchema = Type.Union([
   Type.Literal("PERCENTAGE"),
@@ -140,17 +141,34 @@ export const AdminListQuerySchema = Type.Object({
 }, { additionalProperties: false });
 export type AdminListQueryDto = Static<typeof AdminListQuerySchema>;
 
+export const AdminUserListQuerySchema = Type.Object({
+  page: Type.Optional(Type.Integer({ minimum: 1, default: 1 })),
+  pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  search: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+  role: Type.Optional(PlatformRoleSchema),
+}, { additionalProperties: false });
+export type AdminUserListQueryDto = Static<typeof AdminUserListQuerySchema>;
+
 export const AdminUserSummarySchema = Type.Object({
   id: UuidSchema,
   email: Type.Union([Type.String(), Type.Null()]),
   phone: Type.Union([Type.String(), Type.Null()]),
-  status: Type.String(),
-  platformRole: Type.String(),
+  status: UserStatusSchema,
+  platformRole: PlatformRoleSchema,
   createdAt: IsoTimestampSchema,
 }, { additionalProperties: false });
 export type AdminUserSummaryDto = Static<typeof AdminUserSummarySchema>;
 export const AdminUserListResponseSchema = Type.Object({ items: Type.Array(AdminUserSummarySchema), pagination: PaginationMetaSchema }, { additionalProperties: false });
 export type AdminUserListResponseDto = Static<typeof AdminUserListResponseSchema>;
+
+export const AdminUserIdParamsSchema = Type.Object({
+  userId: UuidSchema,
+}, { additionalProperties: false });
+
+export const UpdateAdminUserRoleBodySchema = Type.Object({
+  role: PlatformRoleSchema,
+}, { additionalProperties: false });
+export type UpdateAdminUserRoleBodyDto = Static<typeof UpdateAdminUserRoleBodySchema>;
 
 export const AdminOrderSummarySchema = Type.Object({
   id: UuidSchema,
