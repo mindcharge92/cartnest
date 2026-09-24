@@ -9,13 +9,15 @@ import { AdminNotificationOperations } from "./admin-notification-operations";
 import { AdminOrderOperations } from "./admin-order-operations";
 import { AdminOverview } from "./admin-overview";
 import { AdminPrivacyOperations } from "./admin-privacy-operations";
+import { AdminUserManagement } from "./admin-user-management";
 
-type AdminSection = "overview" | "orders" | "commercial" | "notifications" | "privacy";
+type AdminSection = "overview" | "users" | "orders" | "commercial" | "notifications" | "privacy";
 
 export function AdminConsole() {
   const { session, status, error, reloadSession } = useSession();
   const roleAllowed = Boolean(session && ["ADMIN", "SUPER_ADMIN"].includes(session.user.platformRole));
   const mfaSatisfied = Boolean(session?.mfa.satisfied);
+  const isSuperAdmin = session?.user.platformRole === "SUPER_ADMIN";
   const [section, setSection] = useState<AdminSection>("overview");
 
   if (status === "loading") return <LoadingState label="Checking admin session…" />;
@@ -29,6 +31,7 @@ export function AdminConsole() {
         Admin section
         <select value={section} onChange={(event) => setSection(event.target.value as AdminSection)}>
           <option value="overview">Overview</option>
+          {isSuperAdmin ? <option value="users">User management</option> : null}
           <option value="orders">Order operations</option>
           <option value="commercial">Tax & promotions</option>
           <option value="notifications">Notifications</option>
@@ -42,6 +45,7 @@ export function AdminConsole() {
         </div>
         <nav className="adminNav">
           <button className={section === "overview" ? "adminNavButton adminNavButtonActive" : "adminNavButton"} type="button" onClick={() => setSection("overview")}>Overview</button>
+          {isSuperAdmin ? <button className={section === "users" ? "adminNavButton adminNavButtonActive" : "adminNavButton"} type="button" onClick={() => setSection("users")}>User management</button> : null}
           <button className={section === "orders" ? "adminNavButton adminNavButtonActive" : "adminNavButton"} type="button" onClick={() => setSection("orders")}>Order operations</button>
           <button className={section === "commercial" ? "adminNavButton adminNavButtonActive" : "adminNavButton"} type="button" onClick={() => setSection("commercial")}>Tax & promotions</button>
           <button className={section === "notifications" ? "adminNavButton adminNavButtonActive" : "adminNavButton"} type="button" onClick={() => setSection("notifications")}>Notifications</button>
@@ -62,6 +66,7 @@ export function AdminConsole() {
         </header>
 
         {section === "overview" ? <AdminOverview /> : null}
+        {section === "users" && isSuperAdmin ? <AdminUserManagement /> : null}
         {section === "orders" ? <AdminOrderOperations /> : null}
         {section === "commercial" ? <AdminCommercialPolicy /> : null}
         {section === "notifications" ? <AdminNotificationOperations /> : null}
