@@ -1044,3 +1044,252 @@ input:focus, textarea:focus, select:focus { border-color: var(--brand); outline:
   .adminUsersActiveFilters { align-items: flex-start; flex-direction: column; gap: 0.4rem; }
   .adminRoleConfirmation .actionRow > * { flex: 1; }
 }
+
+
+/* Admin vendor verification */
+.adminKycHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.adminKycHeading p { margin: 0.3rem 0 0; color: var(--text-soft); font-size: 0.76rem; line-height: 1.55; }
+.adminKycHeading .secondaryButton,
+.adminKycApprovalBar .primaryButton,
+.adminKycApprovalBar .dangerButton,
+.adminKycRecordActions .primaryButton,
+.adminKycRecordActions .dangerButton,
+.adminKycReviewPanel .primaryButton,
+.adminKycReviewPanel .secondaryButton,
+.adminKycReviewPanel .dangerButton {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.72rem;
+  font-size: 0.7rem;
+}
+.adminKycSecurityNote {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid #cfe1d3;
+  border-radius: var(--radius-md);
+  background: #f4f9f5;
+  padding: 0.75rem 0.9rem;
+  color: #405347;
+  font-size: 0.72rem;
+}
+.adminKycSecurityNote strong { color: var(--brand-dark); white-space: nowrap; }
+.adminKycFilters { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.adminKycFilter {
+  min-height: 2.15rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 0.4rem 0.68rem;
+  color: var(--text-soft);
+  font-size: 0.66rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.adminKycFilter:hover,
+.adminKycFilterActive { border-color: #b8d1bd; background: var(--brand-soft); color: var(--brand-dark); }
+.adminKycWorkspace {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.32fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+}
+.adminKycVendorList,
+.adminKycDetail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.adminKycVendorList { display: grid; }
+.adminKycVendorListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  background: #f8faf7;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+.adminKycVendorListHeader span {
+  min-width: 1.45rem;
+  min-height: 1.45rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+.adminKycVendorButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border: 0;
+  border-bottom: 1px solid #edf0ec;
+  background: transparent;
+  padding: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+.adminKycVendorButton:last-of-type { border-bottom: 0; }
+.adminKycVendorButton:hover,
+.adminKycVendorButtonActive { background: #f7faf7; }
+.adminKycVendorButtonActive { box-shadow: inset 3px 0 0 var(--brand); }
+.adminKycVendorButton > span:first-child { min-width: 0; display: grid; gap: 0.16rem; }
+.adminKycVendorButton strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; }
+.adminKycVendorButton small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); font-size: 0.64rem; }
+.adminKycStatusPending { background: #fff4dc; color: #8a5908; }
+.adminKycStatusDanger { background: var(--danger-soft); color: var(--danger); }
+.adminKycDetail { min-height: 24rem; }
+.adminKycVendorHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.adminKycVendorHeader h3 { margin: 0; font-size: 1.15rem; letter-spacing: -0.025em; }
+.adminKycVendorHeader p:not(.eyebrow) { margin: 0.3rem 0 0; color: var(--text-soft); font-size: 0.72rem; }
+.adminKycSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--line);
+}
+.adminKycSummary > div { display: grid; gap: 0.22rem; border: 1px solid var(--line); border-radius: 0.55rem; padding: 0.75rem; }
+.adminKycSummary span { color: var(--text-soft); font-size: 0.62rem; font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase; }
+.adminKycSummary strong { font-size: 0.88rem; }
+.adminKycSummary small { color: var(--text-soft); font-size: 0.62rem; line-height: 1.45; }
+.adminKycApprovalBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #fafbf9;
+}
+.adminKycApprovalBar > div:first-child { display: grid; gap: 0.18rem; }
+.adminKycApprovalBar strong { font-size: 0.78rem; }
+.adminKycApprovalBar span { color: var(--text-soft); font-size: 0.68rem; line-height: 1.45; }
+.adminKycRecords { display: grid; }
+.adminKycRecordsHeading { display: grid; gap: 0.2rem; padding: 0.85rem 1rem 0.65rem; }
+.adminKycRecordsHeading strong { font-size: 0.8rem; }
+.adminKycRecordsHeading span { color: var(--text-soft); font-size: 0.66rem; line-height: 1.45; }
+.adminKycRecord {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-top: 1px solid #edf0ec;
+}
+.adminKycRecordMain { min-width: 0; display: grid; gap: 0.7rem; }
+.adminKycRecordTitle { display: flex; align-items: center; gap: 0.5rem; }
+.adminKycRecordTitle strong { font-size: 0.77rem; }
+.adminKycRecord dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem 1rem; }
+.adminKycRecord dl div { min-width: 0; display: grid; gap: 0.08rem; }
+.adminKycRecord dt { color: var(--text-soft); font-size: 0.58rem; font-weight: 800; text-transform: uppercase; }
+.adminKycRecord dd { margin: 0; overflow-wrap: anywhere; font-size: 0.69rem; }
+.adminKycRecordActions { display: flex; align-items: start; gap: 0.45rem; }
+.adminKycReviewPanel {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid #e6b9b4;
+  border-radius: var(--radius-md);
+  background: #fff8f7;
+  padding: 1rem;
+}
+.adminKycReviewPanel h3 { margin: 0; font-size: 0.95rem; }
+.adminKycReviewPanel textarea { resize: vertical; min-height: 5.5rem; font-size: 0.76rem; }
+.adminKycEmpty { display: grid; gap: 0.25rem; padding: 1.5rem 1rem; text-align: center; }
+.adminKycEmpty strong { font-size: 0.8rem; }
+.adminKycEmpty span { color: var(--text-soft); font-size: 0.68rem; line-height: 1.5; }
+
+@media (max-width: 980px) {
+  .adminKycWorkspace { grid-template-columns: 1fr; }
+  .adminKycVendorList { max-height: 18rem; overflow-y: auto; }
+}
+@media (max-width: 680px) {
+  .adminKycHeading,
+  .adminKycApprovalBar,
+  .adminKycSecurityNote,
+  .adminKycRecord { align-items: stretch; flex-direction: column; }
+  .adminKycHeading,
+  .adminKycApprovalBar { display: flex; }
+  .adminKycSecurityNote { display: grid; }
+  .adminKycSummary { grid-template-columns: 1fr; }
+  .adminKycRecord { grid-template-columns: 1fr; }
+  .adminKycRecord dl { grid-template-columns: 1fr; }
+  .adminKycRecordActions > * { flex: 1; }
+  .adminKycApprovalBar .actionRow > * { flex: 1; }
+}
+
+/* Admin settlement operations */
+.adminSettlement {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.adminSettlementPolicyNote { margin: 0; color: var(--text-soft); font-size: 0.7rem; line-height: 1.5; }
+.adminSettlementGate {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #efc5c1;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+}
+.adminSettlementGateReady { border-color: #bfd8c5; background: #f3f9f4; }
+.adminSettlementGate strong { font-size: 0.78rem; }
+.adminSettlementGate span { color: var(--text-soft); font-size: 0.7rem; line-height: 1.45; }
+.adminSettlementForm {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.35fr) minmax(14rem, 1fr) auto;
+  gap: 0.65rem;
+  align-items: end;
+}
+.adminSettlementForm .field { font-size: 0.72rem; }
+.adminSettlementForm input,
+.adminSettlementForm select { min-height: 2.5rem; font-size: 0.74rem; }
+.adminSettlementForm .secondaryButton { min-height: 2.5rem; }
+.adminSettlementReason {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid #efc5c1;
+  border-radius: var(--radius-md);
+  background: #fffafa;
+}
+.adminSettlementGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+.adminSettlementCard {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.adminSettlementCard > div:first-child { display: flex; justify-content: space-between; gap: 0.65rem; align-items: center; }
+.adminSettlementCard > div:first-child > strong { font-size: 0.82rem; }
+.adminSettlementCard p { margin: 0; color: var(--text-soft); font-size: 0.7rem; overflow-wrap: anywhere; }
+.adminSettlementCard .primaryButton,
+.adminSettlementCard .secondaryButton,
+.adminSettlementCard .dangerButton { min-height: 2.25rem; padding: 0.4rem 0.65rem; font-size: 0.68rem; }
+@media (max-width: 760px) {
+  .adminSettlementForm { grid-template-columns: 1fr; }
+  .adminSettlementGrid { grid-template-columns: 1fr; }
+}

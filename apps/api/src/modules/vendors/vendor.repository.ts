@@ -122,6 +122,7 @@ export interface VendorRepository {
   listProviderAccounts(vendorId: string): Promise<ProviderAccountRecord[]>;
   upsertProviderAccount(vendorId: string, provider: PaymentProvider, externalSubaccountId: string): Promise<ProviderAccountRecord>;
   findProviderAccount(vendorId: string, provider: PaymentProvider): Promise<ProviderAccountRecord | null>;
+  findProviderAccountByExternalId(provider: PaymentProvider, externalSubaccountId: string): Promise<ProviderAccountRecord | null>;
   setProviderAccountStatus(vendorId: string, provider: PaymentProvider, status: "ACTIVE" | "SUSPENDED" | "DISABLED"): Promise<ProviderAccountRecord | null>;
   writeAudit(input: {
     actorType: "USER" | "SYSTEM" | "PROVIDER";
@@ -507,6 +508,12 @@ export class PrismaVendorRepository implements VendorRepository {
   findProviderAccount(vendorId: string, provider: PaymentProvider): Promise<ProviderAccountRecord | null> {
     return this.database.paymentProviderAccount.findUnique({
       where: { vendorId_provider: { vendorId, provider } },
+    });
+  }
+
+  findProviderAccountByExternalId(provider: PaymentProvider, externalSubaccountId: string): Promise<ProviderAccountRecord | null> {
+    return this.database.paymentProviderAccount.findUnique({
+      where: { provider_externalSubaccountId: { provider, externalSubaccountId } },
     });
   }
 

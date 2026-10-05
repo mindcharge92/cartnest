@@ -134,6 +134,20 @@ function toProviderAccount(record: ProviderAccountRecord): PaymentProviderAccoun
   };
 }
 
+function latestVerificationOfType(
+  records: readonly VerificationRecord[],
+  type: VerificationRecord["type"],
+): VerificationRecord | undefined {
+  return records
+    .filter((record) => record.type === type)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+}
+
+function isCurrentVerified(record: VerificationRecord | undefined, now: Date): boolean {
+  if (!record || record.status !== "VERIFIED") return false;
+  return !record.expiresAt || record.expiresAt.getTime() > now.getTime();
+}
+
 export interface VendorServiceOptions {
   readonly requireVerifiedIdentifier?: boolean;
 }
@@ -218,6 +232,14 @@ export class VendorService {
   ): Promise<VendorVerificationDto> {
     const membership = await this.membershipFor(principal, vendorId);
     requireVendorPermission(membership, "verification:manage");
+    const reference = input.reference?.trim();
+    if (input.type !== "OTHER" && !reference) {
+      throw new VendorError(
+        "VERIFICATION_REFERENCE_REQUIRED",
+        "A verification reference is required for business, identity, and bank-account checks.",
+        400,
+      );
+    }
     const existing = await this.repository.listVerifications(vendorId);
     if (existing.some((entry) => entry.type === input.type && entry.status === "PENDING")) {
       throw new VendorError(
@@ -226,7 +248,7 @@ export class VendorService {
         409,
       );
     }
-    const record = await this.repository.createVerification(vendorId, input.type, input.reference);
+    const record = await this.repository.createVerification(vendorId, input.type, reference || undefined);
     await this.audit(
       principal,
       "vendor.verification.submitted",
@@ -503,6 +525,16 @@ export class VendorService {
     return (await this.repository.listAdminVendors(status)).map(toVendor);
   }
 
+  async listAdminVerifications(
+    principal: AccessPrincipal,
+    vendorId: string,
+  ): Promise<VendorVerificationDto[]> {
+    this.requireAdmin(principal);
+    const vendor = await this.repository.findVendor(vendorId);
+    if (!vendor) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
+    return (await this.repository.listVerifications(vendorId)).map(toVerification);
+  }
+
   async approveVendor(
     principal: AccessPrincipal,
     vendorId: string,
@@ -515,12 +547,13 @@ export class VendorService {
       throw new VendorError("INVALID_VENDOR_STATE", "Vendor cannot be approved from its current state.", 409);
     }
     const verifications = await this.repository.listVerifications(vendorId);
-    const hasBusiness = verifications.some((entry) => entry.type === "BUSINESS" && entry.status === "VERIFIED");
-    const hasIdentity = verifications.some((entry) => entry.type === "IDENTITY" && entry.status === "VERIFIED");
-    if (!hasBusiness || !hasIdentity) {
+    const now = new Date();
+    const business = latestVerificationOfType(verifications, "BUSINESS");
+    const identity = latestVerificationOfType(verifications, "IDENTITY");
+    if (!isCurrentVerified(business, now) || !isCurrentVerified(identity, now)) {
       throw new VendorError(
         "VENDOR_KYC_INCOMPLETE",
-        "Verified BUSINESS and IDENTITY checks are required before approval.",
+        "Current VERIFIED BUSINESS and IDENTITY checks are required before approval.",
         409,
       );
     }
@@ -542,6 +575,10 @@ export class VendorService {
     if (vendor.status !== "PENDING") {
       throw new VendorError("INVALID_VENDOR_STATE", "Only a pending vendor can be rejected.", 409);
     }
+    const reviewReason = reason?.trim();
+    if (!reviewReason || reviewReason.length < 2) {
+      throw new VendorError("REVIEW_REASON_REQUIRED", "A rejection reason is required.", 400);
+    }
     const updated = await this.repository.setVendorStatus(vendorId, "REJECTED", new Date());
     if (!updated) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
     await this.audit(
@@ -550,7 +587,7 @@ export class VendorService {
       "Vendor",
       vendorId,
       requestId,
-      reason ? { reason } : undefined,
+      { reason: reviewReason },
     );
     return toVendor(updated);
   }
@@ -567,6 +604,10 @@ export class VendorService {
     if (vendor.status !== "APPROVED") {
       throw new VendorError("INVALID_VENDOR_STATE", "Only an approved vendor can be suspended.", 409);
     }
+    const reviewReason = reason?.trim();
+    if (!reviewReason || reviewReason.length < 2) {
+      throw new VendorError("REVIEW_REASON_REQUIRED", "A suspension reason is required.", 400);
+    }
     const updated = await this.repository.setVendorStatus(vendorId, "SUSPENDED", new Date());
     if (!updated) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
     await this.audit(
@@ -575,7 +616,7 @@ export class VendorService {
       "Vendor",
       vendorId,
       requestId,
-      reason ? { reason } : undefined,
+      { reason: reviewReason },
     );
     return toVendor(updated);
   }
@@ -594,12 +635,24 @@ export class VendorService {
     if (current.status !== "PENDING") {
       throw new VendorError("INVALID_VERIFICATION_STATE", "Only pending verification can be reviewed.", 409);
     }
+    const reviewReason = input.reason?.trim();
+    if (input.status === "REJECTED" && (!reviewReason || reviewReason.length < 2)) {
+      throw new VendorError("REVIEW_REASON_REQUIRED", "A verification rejection reason is required.", 400);
+    }
+    const reviewedAt = new Date();
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : undefined;
+    if (input.status === "VERIFIED" && expiresAt && expiresAt.getTime() <= reviewedAt.getTime()) {
+      throw new VendorError(
+        "INVALID_VERIFICATION_EXPIRY",
+        "Verification expiry must be in the future.",
+        400,
+      );
+    }
     const updated = await this.repository.reviewVerification(
       verificationId,
       input.status,
       principal.userId,
-      new Date(),
+      reviewedAt,
       expiresAt,
     );
     if (!updated) throw new VendorError("VERIFICATION_NOT_FOUND", "Vendor verification was not found.", 404);
@@ -612,10 +665,20 @@ export class VendorService {
       {
         vendorId: current.vendorId,
         type: current.type,
-        ...(input.reason ? { reason: input.reason } : {}),
+        ...(reviewReason ? { reason: reviewReason } : {}),
       },
     );
     return toVerification(updated);
+  }
+
+  async listAdminProviderAccounts(
+    principal: AccessPrincipal,
+    vendorId: string,
+  ): Promise<PaymentProviderAccountDto[]> {
+    this.requireAdmin(principal);
+    const vendor = await this.repository.findVendor(vendorId);
+    if (!vendor) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
+    return (await this.repository.listProviderAccounts(vendorId)).map(toProviderAccount);
   }
 
   async recordProviderAccount(
@@ -627,10 +690,29 @@ export class VendorService {
     this.requireAdmin(principal);
     const vendor = await this.repository.findVendor(vendorId);
     if (!vendor) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
+    const externalSubaccountId = input.externalSubaccountId.trim();
+    if (!externalSubaccountId) {
+      throw new VendorError(
+        "PROVIDER_ACCOUNT_ID_REQUIRED",
+        "A provider subaccount identifier is required.",
+        400,
+      );
+    }
+    const collision = await this.repository.findProviderAccountByExternalId(
+      input.provider,
+      externalSubaccountId,
+    );
+    if (collision && collision.vendorId !== vendorId) {
+      throw new VendorError(
+        "PROVIDER_ACCOUNT_ID_TAKEN",
+        "That provider subaccount identifier is already linked to another vendor.",
+        409,
+      );
+    }
     const account = await this.repository.upsertProviderAccount(
       vendorId,
       input.provider,
-      input.externalSubaccountId,
+      externalSubaccountId,
     );
     await this.audit(
       principal,
@@ -652,12 +734,34 @@ export class VendorService {
     requestId?: string,
   ): Promise<PaymentProviderAccountDto> {
     this.requireAdmin(principal);
+    const vendor = await this.repository.findVendor(vendorId);
+    if (!vendor) throw new VendorError("VENDOR_NOT_FOUND", "Vendor was not found.", 404);
+    const currentAccount = await this.repository.findProviderAccount(vendorId, provider);
+    if (!currentAccount) {
+      throw new VendorError("PROVIDER_ACCOUNT_NOT_FOUND", "Payment provider account was not found.", 404);
+    }
+    const reviewReason = reason?.trim();
+    if (status !== "ACTIVE" && (!reviewReason || reviewReason.length < 2)) {
+      throw new VendorError(
+        "REVIEW_REASON_REQUIRED",
+        "A reason is required when settlement is suspended or disabled.",
+        400,
+      );
+    }
     if (status === "ACTIVE") {
+      if (vendor.status !== "APPROVED") {
+        throw new VendorError(
+          "VENDOR_NOT_APPROVED",
+          "The vendor must be approved before provider settlement can be activated.",
+          409,
+        );
+      }
       const verifications = await this.repository.listVerifications(vendorId);
-      if (!verifications.some((entry) => entry.type === "BANK_ACCOUNT" && entry.status === "VERIFIED")) {
+      const bankAccount = latestVerificationOfType(verifications, "BANK_ACCOUNT");
+      if (!isCurrentVerified(bankAccount, new Date())) {
         throw new VendorError(
           "BANK_VERIFICATION_REQUIRED",
-          "A verified bank-account check is required before provider settlement can be activated.",
+          "A current verified bank-account check is required before provider settlement can be activated.",
           409,
         );
       }
@@ -676,7 +780,7 @@ export class VendorService {
         vendorId,
         provider,
         status,
-        ...(reason ? { reason } : {}),
+        ...(reviewReason ? { reason: reviewReason } : {}),
       },
     );
     return toProviderAccount(updated);

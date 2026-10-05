@@ -110,14 +110,14 @@ VERIFIED -> EXPIRED   # lifecycle supported by the persistence model; expiry aut
 
 To make the approved requirement "vendors receive stronger verification and require admin approval before selling" executable, P3 currently enforces:
 
-- a `BUSINESS` verification in `VERIFIED` state; and
-- an `IDENTITY` verification in `VERIFIED` state
+- the latest `BUSINESS` verification is `VERIFIED` and not expired; and
+- the latest `IDENTITY` verification is `VERIFIED` and not expired
 
-before an administrator can move the vendor to `APPROVED`.
+before an administrator can move the vendor to `APPROVED`. A newer rejected, pending, or expired check cannot be bypassed by an older verified record.
 
 This exact pair of required KYC checks was **not a previously separate product decision**. It is a P3 implementation-policy baseline chosen to make the approved stronger-vendor-verification rule enforceable. If compliance/legal requirements later require CAC-specific fields, directors, beneficial owners, tax identifiers, or different verification tiers, this policy should be revised through normal change control without weakening the ownership boundary.
 
-A verified `BANK_ACCOUNT` check is currently required before a recorded payment-provider settlement/subaccount can be moved to `ACTIVE`.
+The latest `BANK_ACCOUNT` check must be current and `VERIFIED`, and the vendor itself must be `APPROVED`, before a recorded payment-provider settlement/subaccount can be moved to `ACTIVE`. Provider subaccount identifiers are unique per provider and cannot be attached to two vendors.
 
 ## 5. Administrator Review
 

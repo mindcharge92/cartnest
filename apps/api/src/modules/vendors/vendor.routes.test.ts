@@ -20,6 +20,8 @@ describe("P3 vendor route contracts", () => {
     expect(document.paths).toHaveProperty("/api/v1/vendors/{vendorId}/stores");
     expect(document.paths).toHaveProperty("/api/v1/vendors/{vendorId}/members");
     expect(document.paths).toHaveProperty("/api/v1/admin/vendors");
+    expect(document.paths).toHaveProperty("/api/v1/admin/vendors/{vendorId}/verifications");
+    expect(document.paths).toHaveProperty("/api/v1/admin/vendors/{vendorId}/provider-accounts");
     expect(document.paths).toHaveProperty(
       "/api/v1/admin/vendor-verifications/{verificationId}/review",
     );
@@ -33,6 +35,22 @@ describe("P3 vendor route contracts", () => {
       method: "POST",
       url: "/api/v1/vendors",
       payload: { displayName: "x", extra: true },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
+  });
+
+  it("requires a rejection reason at the admin HTTP contract boundary", async () => {
+    const app = buildApp({ logger: false });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/vendors/11111111-1111-4111-8111-111111111111/reject",
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);

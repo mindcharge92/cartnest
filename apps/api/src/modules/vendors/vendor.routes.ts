@@ -66,12 +66,14 @@ function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown)
 }
 
 function vendorServiceOrThrow(service: VendorService | undefined): VendorService {
-  if (!service) throw new VendorError("VENDOR_SERVICE_UNAVAILABLE", "Vendor storage is unavailable.", 503);
+  if (!service)
+    throw new VendorError("VENDOR_SERVICE_UNAVAILABLE", "Vendor storage is unavailable.", 503);
   return service;
 }
 
 function authServiceOrThrow(service: AuthService | undefined): AuthService {
-  if (!service) throw new AuthError("AUTH_UNAVAILABLE", "Authentication storage is unavailable.", 503);
+  if (!service)
+    throw new AuthError("AUTH_UNAVAILABLE", "Authentication storage is unavailable.", 503);
   return service;
 }
 
@@ -107,7 +109,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         requireCsrfToken(request);
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.code(201).send(await service.createVendor(principal, request.body, request.id));
+        return reply
+          .code(201)
+          .send(await service.createVendor(principal, request.body, request.id));
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -169,7 +173,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
       try {
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send({ items: await service.listVerifications(principal, request.params.vendorId) });
+        return reply.send({
+          items: await service.listVerifications(principal, request.params.vendorId),
+        });
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -247,7 +253,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         const principal = await authenticatedPrincipal(request, options);
         return reply
           .code(201)
-          .send(await service.createStore(principal, request.params.vendorId, request.body, request.id));
+          .send(
+            await service.createStore(principal, request.params.vendorId, request.body, request.id),
+          );
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -270,7 +278,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         requireCsrfToken(request);
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send(await service.updateStore(principal, request.params.storeId, request.body, request.id));
+        return reply.send(
+          await service.updateStore(principal, request.params.storeId, request.body, request.id),
+        );
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -292,7 +302,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         requireCsrfToken(request);
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send(await service.activateStore(principal, request.params.storeId, request.id));
+        return reply.send(
+          await service.activateStore(principal, request.params.storeId, request.id),
+        );
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -361,7 +373,14 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         const principal = await authenticatedPrincipal(request, options);
         return reply
           .code(201)
-          .send(await service.inviteMember(principal, request.params.vendorId, request.body, request.id));
+          .send(
+            await service.inviteMember(
+              principal,
+              request.params.vendorId,
+              request.body,
+              request.id,
+            ),
+          );
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -383,7 +402,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         requireCsrfToken(request);
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send(await service.acceptInvitation(principal, request.params.vendorId, request.id));
+        return reply.send(
+          await service.acceptInvitation(principal, request.params.vendorId, request.id),
+        );
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -463,7 +484,9 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
       try {
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send({ items: await service.listProviderAccounts(principal, request.params.vendorId) });
+        return reply.send({
+          items: await service.listProviderAccounts(principal, request.params.vendorId),
+        });
       } catch (error) {
         return sendError(request, reply, error);
       }
@@ -484,14 +507,63 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
       try {
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
-        return reply.send({ items: await service.listAdminVendors(principal, request.query.status) });
+        return reply.send({
+          items: await service.listAdminVendors(principal, request.query.status),
+        });
       } catch (error) {
         return sendError(request, reply, error);
       }
     },
   );
 
-  for (const transition of ["approve", "reject", "suspend"] as const) {
+  server.get(
+    "/api/v1/admin/vendors/:vendorId/verifications",
+    {
+      schema: {
+        tags: ["admin"],
+        operationId: "adminListVendorVerifications",
+        params: VendorIdParamsSchema,
+        response: { 200: VendorVerificationListResponseSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const service = vendorServiceOrThrow(options.service);
+        const principal = await authenticatedPrincipal(request, options);
+        return reply.send({
+          items: await service.listAdminVerifications(principal, request.params.vendorId),
+        });
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    },
+  );
+
+  server.post(
+    "/api/v1/admin/vendors/:vendorId/approve",
+    {
+      schema: {
+        tags: ["admin"],
+        operationId: "adminApproveVendor",
+        params: VendorIdParamsSchema,
+        response: { 200: VendorSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      try {
+        requireCsrfToken(request);
+        const service = vendorServiceOrThrow(options.service);
+        const principal = await authenticatedPrincipal(request, options);
+        return reply.send(
+          await service.approveVendor(principal, request.params.vendorId, request.id),
+        );
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    },
+  );
+
+  for (const transition of ["reject", "suspend"] as const) {
     server.post(
       `/api/v1/admin/vendors/:vendorId/${transition}`,
       {
@@ -508,9 +580,6 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
           requireCsrfToken(request);
           const service = vendorServiceOrThrow(options.service);
           const principal = await authenticatedPrincipal(request, options);
-          if (transition === "approve") {
-            return reply.send(await service.approveVendor(principal, request.params.vendorId, request.id));
-          }
           if (transition === "reject") {
             return reply.send(
               await service.rejectVendor(
@@ -566,6 +635,29 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
     },
   );
 
+  server.get(
+    "/api/v1/admin/vendors/:vendorId/provider-accounts",
+    {
+      schema: {
+        tags: ["admin"],
+        operationId: "adminListVendorProviderAccounts",
+        params: VendorIdParamsSchema,
+        response: { 200: PaymentProviderAccountListResponseSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const service = vendorServiceOrThrow(options.service);
+        const principal = await authenticatedPrincipal(request, options);
+        return reply.send({
+          items: await service.listAdminProviderAccounts(principal, request.params.vendorId),
+        });
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    },
+  );
+
   server.put(
     "/api/v1/admin/vendors/:vendorId/provider-accounts",
     {
@@ -583,7 +675,12 @@ export function registerVendorRoutes(app: FastifyInstance, options: VendorRoutes
         const service = vendorServiceOrThrow(options.service);
         const principal = await authenticatedPrincipal(request, options);
         return reply.send(
-          await service.recordProviderAccount(principal, request.params.vendorId, request.body, request.id),
+          await service.recordProviderAccount(
+            principal,
+            request.params.vendorId,
+            request.body,
+            request.id,
+          ),
         );
       } catch (error) {
         return sendError(request, reply, error);

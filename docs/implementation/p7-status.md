@@ -376,7 +376,7 @@ The authenticated buyer can also request reconciliation for their own PaymentInt
 POST /api/v1/payment-intents/:paymentIntentId/reconcile
 ```
 
-The remaining infrastructure task is wiring `reconcilePending()` into the approved BullMQ/worker scheduler. That wiring is not falsely marked complete in P7.
+`reconcilePending()` is now invoked by the API background-task runtime when `BACKGROUND_TASKS_ENABLED` is enabled (the non-test default), alongside refund reconciliation, logistics tracking, and notification delivery. It is operationally scheduled, although ownership has not been migrated into the BullMQ worker process; that migration is an architectural follow-up rather than an unwired reconciliation path.
 
 ## 17. Tests Added
 

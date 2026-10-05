@@ -171,7 +171,7 @@ HELD
 
 Release/expiry decrements `InventoryItem.reserved` and increments the inventory version in the same transaction as the reservation-state/order-state update.
 
-P6 implements the expiry processor method, but the periodic worker/BullMQ scheduler invocation is not yet wired. That wiring is required before the phase is considered operationally complete in a deployed environment.
+The reservation-expiry processor is now wired through the BullMQ maintenance queue: `startWorkerScheduler()` periodically enqueues `inventory.reservations.expire`, and the maintenance consumer executes `expireInventoryReservations()`. Deployment still depends on the worker and Redis being healthy, but the source-level scheduler/consumer integration is complete.
 
 P7 owns the payment-success transition that converts `HELD` reservations to `COMMITTED` and decrements physical `onHand` according to the finalized payment/inventory transaction design.
 

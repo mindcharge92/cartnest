@@ -239,8 +239,8 @@ Tracking event history                          IMPLEMENTED
 Buyer ShipmentDto allocation mapping fix         IMPLEMENTED
 Buyer allocation regression test                COMMITTED
 GIGL live booking                               INTENTIONALLY GATED
-BullMQ tracking runtime                         NOT IMPLEMENTED END-TO-END
-OpenAPI/client regeneration evidence            NOT EXECUTED
+Background tracking runtime                    WIRED IN API BACKGROUND TASKS
+OpenAPI/client regeneration evidence            EXECUTED 2026-10-05
 Prisma migration runtime evidence               NOT EXECUTED
 CI typecheck/test/build evidence                 NOT EXECUTED
 Provider sandbox/browser evidence               NOT EXECUTED

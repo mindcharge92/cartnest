@@ -44,7 +44,10 @@ export const StoreStatusSchema = Type.Union([
 ]);
 export type StoreStatusDto = Static<typeof StoreStatusSchema>;
 
-export const PaymentProviderSchema = Type.Union([Type.Literal("PAYSTACK"), Type.Literal("FLUTTERWAVE")]);
+export const PaymentProviderSchema = Type.Union([
+  Type.Literal("PAYSTACK"),
+  Type.Literal("FLUTTERWAVE"),
+]);
 export type PaymentProviderDto = Static<typeof PaymentProviderSchema>;
 
 export const ProviderAccountStatusSchema = Type.Union([
@@ -212,7 +215,9 @@ export const PaymentProviderAccountListResponseSchema = Type.Object(
   { items: Type.Array(PaymentProviderAccountSchema) },
   { additionalProperties: false },
 );
-export type PaymentProviderAccountListResponseDto = Static<typeof PaymentProviderAccountListResponseSchema>;
+export type PaymentProviderAccountListResponseDto = Static<
+  typeof PaymentProviderAccountListResponseSchema
+>;
 
 export const VendorListResponseSchema = Type.Object(
   { items: Type.Array(VendorSchema) },
@@ -230,10 +235,12 @@ export const CreateVendorBodySchema = Type.Object(
 );
 export type CreateVendorBodyDto = Static<typeof CreateVendorBodySchema>;
 
+const VerificationReferenceSchema = Type.String({ minLength: 1, maxLength: 500, pattern: "\\S" });
+
 export const SubmitVendorVerificationBodySchema = Type.Object(
   {
     type: VerificationTypeSchema,
-    reference: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    reference: Type.Optional(VerificationReferenceSchema),
   },
   { additionalProperties: false },
 );
@@ -252,7 +259,9 @@ export type CreateStoreBodyDto = Static<typeof CreateStoreBodySchema>;
 export const UpdateStoreBodySchema = Type.Object(
   {
     name: Type.Optional(Type.String({ minLength: 2, maxLength: 160 })),
-    slug: Type.Optional(Type.String({ minLength: 2, maxLength: 120, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" })),
+    slug: Type.Optional(
+      Type.String({ minLength: 2, maxLength: 120, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }),
+    ),
     description: Type.Optional(Type.String({ maxLength: 5000 })),
   },
   { additionalProperties: false, minProperties: 1 },
@@ -268,20 +277,27 @@ export const InviteVendorMemberBodySchema = Type.Object(
 );
 export type InviteVendorMemberBodyDto = Static<typeof InviteVendorMemberBodySchema>;
 
-const MutableVendorMemberStatusSchema = Type.Union([Type.Literal("ACTIVE"), Type.Literal("SUSPENDED")]);
+const MutableVendorMemberStatusSchema = Type.Union([
+  Type.Literal("ACTIVE"),
+  Type.Literal("SUSPENDED"),
+]);
 
 export const UpdateVendorMemberBodySchema = Type.Object(
   {
     role: Type.Optional(VendorMemberRoleSchema),
     status: Type.Optional(MutableVendorMemberStatusSchema),
-    permissions: Type.Optional(Type.Array(VendorPermissionSchema, { uniqueItems: true, maxItems: 32 })),
+    permissions: Type.Optional(
+      Type.Array(VendorPermissionSchema, { uniqueItems: true, maxItems: 32 }),
+    ),
   },
   { additionalProperties: false, minProperties: 1 },
 );
 export type UpdateVendorMemberBodyDto = Static<typeof UpdateVendorMemberBodySchema>;
 
+const AdminReviewReasonSchema = Type.String({ minLength: 2, maxLength: 1000, pattern: "\\S" });
+
 export const ReviewVendorBodySchema = Type.Object(
-  { reason: Type.Optional(Type.String({ minLength: 2, maxLength: 1000 })) },
+  { reason: AdminReviewReasonSchema },
   { additionalProperties: false },
 );
 export type ReviewVendorBodyDto = Static<typeof ReviewVendorBodySchema>;
@@ -289,7 +305,7 @@ export type ReviewVendorBodyDto = Static<typeof ReviewVendorBodySchema>;
 export const ReviewVendorVerificationBodySchema = Type.Object(
   {
     status: Type.Union([Type.Literal("VERIFIED"), Type.Literal("REJECTED")]),
-    reason: Type.Optional(Type.String({ minLength: 2, maxLength: 1000 })),
+    reason: Type.Optional(AdminReviewReasonSchema),
     expiresAt: Type.Optional(IsoTimestampSchema),
   },
   { additionalProperties: false },
@@ -299,25 +315,39 @@ export type ReviewVendorVerificationBodyDto = Static<typeof ReviewVendorVerifica
 export const RecordPaymentProviderAccountBodySchema = Type.Object(
   {
     provider: PaymentProviderSchema,
-    externalSubaccountId: Type.String({ minLength: 1, maxLength: 200 }),
+    externalSubaccountId: Type.String({ minLength: 1, maxLength: 200, pattern: "\\S" }),
   },
   { additionalProperties: false },
 );
-export type RecordPaymentProviderAccountBodyDto = Static<typeof RecordPaymentProviderAccountBodySchema>;
+export type RecordPaymentProviderAccountBodyDto = Static<
+  typeof RecordPaymentProviderAccountBodySchema
+>;
 
 export const UpdateProviderAccountStatusBodySchema = Type.Object(
   {
-    status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("SUSPENDED"), Type.Literal("DISABLED")]),
-    reason: Type.Optional(Type.String({ minLength: 2, maxLength: 1000 })),
+    status: Type.Union([
+      Type.Literal("ACTIVE"),
+      Type.Literal("SUSPENDED"),
+      Type.Literal("DISABLED"),
+    ]),
+    reason: Type.Optional(AdminReviewReasonSchema),
   },
   { additionalProperties: false },
 );
-export type UpdateProviderAccountStatusBodyDto = Static<typeof UpdateProviderAccountStatusBodySchema>;
+export type UpdateProviderAccountStatusBodyDto = Static<
+  typeof UpdateProviderAccountStatusBodySchema
+>;
 
-export const VendorIdParamsSchema = Type.Object({ vendorId: UuidSchema }, { additionalProperties: false });
+export const VendorIdParamsSchema = Type.Object(
+  { vendorId: UuidSchema },
+  { additionalProperties: false },
+);
 export type VendorIdParamsDto = Static<typeof VendorIdParamsSchema>;
 
-export const StoreIdParamsSchema = Type.Object({ storeId: UuidSchema }, { additionalProperties: false });
+export const StoreIdParamsSchema = Type.Object(
+  { storeId: UuidSchema },
+  { additionalProperties: false },
+);
 export type StoreIdParamsDto = Static<typeof StoreIdParamsSchema>;
 
 export const VendorMemberParamsSchema = Type.Object(

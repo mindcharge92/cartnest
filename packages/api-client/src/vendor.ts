@@ -3,10 +3,16 @@ import type {
   CreateStoreBodyDto,
   CreateVendorBodyDto,
   InviteVendorMemberBodyDto,
+  PaymentProviderAccountDto,
   PaymentProviderAccountListResponseDto,
+  PaymentProviderDto,
+  RecordPaymentProviderAccountBodyDto,
+  ReviewVendorBodyDto,
+  ReviewVendorVerificationBodyDto,
   StoreDto,
   StoreListResponseDto,
   SubmitVendorVerificationBodyDto,
+  UpdateProviderAccountStatusBodyDto,
   UpdateStoreBodyDto,
   UpdateVendorMemberBodyDto,
   VendorAccessDto,
@@ -14,6 +20,9 @@ import type {
   VendorMemberDto,
   VendorMemberListResponseDto,
   VendorMembershipDto,
+  VendorDto,
+  VendorListResponseDto,
+  VendorStatusDto,
   VendorVerificationDto,
   VendorVerificationListResponseDto,
 } from "@repo/contracts";
@@ -111,6 +120,73 @@ export function createVendorApi(client: ContractRequestClient) {
 
     listProviderAccounts(vendorId: string): Promise<PaymentProviderAccountListResponseDto> {
       return client.request(`/api/v1/vendors/${segment(vendorId)}/provider-accounts`);
+    },
+
+    adminList(status?: VendorStatusDto): Promise<VendorListResponseDto> {
+      const query = status ? `?status=${encodeURIComponent(status)}` : "";
+      return client.request(`/api/v1/admin/vendors${query}`);
+    },
+
+    adminListVerifications(vendorId: string): Promise<VendorVerificationListResponseDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/verifications`);
+    },
+
+    adminListProviderAccounts(vendorId: string): Promise<PaymentProviderAccountListResponseDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/provider-accounts`);
+    },
+
+    adminRecordProviderAccount(
+      vendorId: string,
+      body: RecordPaymentProviderAccountBodyDto,
+    ): Promise<PaymentProviderAccountDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/provider-accounts`, {
+        method: "PUT",
+        body,
+      });
+    },
+
+    adminUpdateProviderAccountStatus(
+      vendorId: string,
+      provider: PaymentProviderDto,
+      body: UpdateProviderAccountStatusBodyDto,
+    ): Promise<PaymentProviderAccountDto> {
+      return client.request(
+        `/api/v1/admin/vendors/${segment(vendorId)}/provider-accounts/${segment(provider)}/status`,
+        { method: "POST", body },
+      );
+    },
+
+    adminApprove(vendorId: string): Promise<VendorDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/approve`, {
+        method: "POST",
+      });
+    },
+
+    adminReject(vendorId: string, body: ReviewVendorBodyDto): Promise<VendorDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/reject`, {
+        method: "POST",
+        body,
+      });
+    },
+
+    adminSuspend(vendorId: string, body: ReviewVendorBodyDto): Promise<VendorDto> {
+      return client.request(`/api/v1/admin/vendors/${segment(vendorId)}/suspend`, {
+        method: "POST",
+        body,
+      });
+    },
+
+    adminReviewVerification(
+      verificationId: string,
+      body: ReviewVendorVerificationBodyDto,
+    ): Promise<VendorVerificationDto> {
+      return client.request(
+        `/api/v1/admin/vendor-verifications/${segment(verificationId)}/review`,
+        {
+          method: "POST",
+          body,
+        },
+      );
     },
   };
 }

@@ -159,7 +159,13 @@ REJECTED
 EXPIRED
 ```
 
-Important boundary: the current backend contract accepts a verification type and optional `reference`; it does not expose a secure KYC-document upload endpoint. The frontend therefore does **not** invent a file-upload flow or persist identity documents in browser state/localStorage. BUSINESS + IDENTITY remain the current approval baseline; BANK_ACCOUNT is shown as the settlement prerequisite established by P3.
+Important boundary: the current backend contract stores a verification type and reference, but it does not expose a secure KYC-document upload endpoint. Runtime policy now requires a non-blank `reference` for BUSINESS, IDENTITY, and BANK_ACCOUNT submissions; OTHER may omit it. The frontend therefore does **not** invent a file-upload flow or persist identity documents in browser state/localStorage. BUSINESS + IDENTITY remain the current approval baseline; BANK_ACCOUNT is shown as the settlement prerequisite established by P3.
+
+### Admin review and settlement-account operations
+
+The `/admin` workspace now includes a vendor-review surface backed by the privileged P3 routes. ADMIN and SUPER_ADMIN users with satisfied MFA can filter vendor applications, inspect verification history, verify/reject individual checks, approve/reject/suspend vendors, and manage Paystack/Flutterwave provider-account records.
+
+Approval uses the **latest** BUSINESS and IDENTITY records and rejects expired checks. Provider-account activation requires an APPROVED vendor plus the latest current VERIFIED BANK_ACCOUNT check. Rejection, suspension, and settlement disable/suspend decisions require an auditable reason. Collection-time gateway splits remain disabled because CartNest's settlement policy is delivery-gated.
 
 ## 9. Stores
 
@@ -273,7 +279,7 @@ The FP3 source pass closes the following identified issues:
 10. **Staff UI could offer owner/self mutations the API rejects** — role, self-change, owner removal, and status controls now match backend policy.
 11. **Generic member update could activate an invitation without user acceptance** — backend state-machine gap fixed and targeted tests committed.
 12. **Staging API URL could duplicate `/api/v1`** — frontend/config/deployment base-URL convention corrected.
-13. **Potential dead Admin navigation before FP10** — the main header exposes Seller now but intentionally does not expose `/admin` until the admin frontend exists.
+13. **Admin vendor-review navigation gap** — the role-gated `/admin` entry now leads to a complete vendor/KYC review surface, including provider-account settlement operations.
 
 ## 14. Remaining Non-Code/External Issues
 
@@ -291,21 +297,25 @@ The committed `.github/workflows/ci.yml` is structurally normal and no job is ev
 
 ### Runtime evidence
 
-Because Actions does not start, the following remain unverified by execution:
+GitHub Actions still does not start jobs, so hosted-CI evidence remains unavailable. Local validation was rerun on 2026-10-05 after the admin-vendor integration repair:
 
 ```text
-pnpm install
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-browser/API integration
-responsive browser QA
+API tests                         116 passed / 4 skipped
+Web tests                         28 passed
+Contracts tests                   70 passed
+API/Web/API-client typecheck      PASS
+API production build              PASS
+Next.js production build          PASS
+ESLint + dependency boundaries    PASS
+Documentation link check          PASS
+OpenAPI + generated client        REGENERATED
 ```
+
+The local host uses Node 22 while the repository declares Node >=24.20.0 <26, so pnpm reports an engine warning. API/Web typechecking was also given a larger Node heap on the constrained cloud host. Browser/API E2E, responsive browser QA, provider sandbox validation, and hosted CI remain separate runtime evidence gates.
 
 ### OpenAPI generation
 
-The generated `schema.ts` snapshot is still stale. FP3 is unblocked by the shared-contract bridge, but the preferred long-term state remains a successfully regenerated OpenAPI client once execution is available.
+The OpenAPI snapshot and `packages/api-client/src/generated/schema.ts` were regenerated after the admin-vendor integration repair. The generated paths now include privileged vendor-verification and provider-account list operations, removing the stale P3+ schema gap while the shared-contract facade remains the higher-level application API.
 
 ### Secure KYC document capture
 
@@ -329,7 +339,7 @@ Loading/empty/error/success states        IMPLEMENTED
 Responsive/keyboard-oriented source       IMPLEMENTED
 Frontend permission logic test            COMMITTED
 Backend invitation policy tests           COMMITTED
-Runtime build/test evidence               NOT EXECUTED
+Runtime build/test evidence               LOCAL PASS 2026-10-05
 Browser/API integration evidence          NOT EXECUTED
 ```
 

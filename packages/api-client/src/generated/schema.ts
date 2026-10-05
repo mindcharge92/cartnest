@@ -356,6 +356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{userId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateAdminUserRole"];
+        trace?: never;
+    };
     "/api/v1/admin/vendor-verifications/{verificationId}/review": {
         parameters: {
             query?: never;
@@ -411,7 +427,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["adminListVendorProviderAccounts"];
         put: operations["adminRecordVendorProviderAccount"];
         post?: never;
         delete?: never;
@@ -462,6 +478,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["adminSuspendVendor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/vendors/{vendorId}/verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListVendorVerifications"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5580,6 +5612,8 @@ export interface operations {
             query?: {
                 page?: number;
                 pageSize?: number;
+                search?: string;
+                role?: "USER" | "ADMIN" | "SUPER_ADMIN";
             };
             header?: never;
             path?: never;
@@ -5601,8 +5635,8 @@ export interface operations {
                             /** @description Opaque UUID identifier */
                             id: string;
                             phone: string | null;
-                            platformRole: string;
-                            status: string;
+                            platformRole: "USER" | "ADMIN" | "SUPER_ADMIN";
+                            status: "PENDING_VERIFICATION" | "ACTIVE" | "SUSPENDED" | "DISABLED";
                         }[];
                         pagination: {
                             page: number;
@@ -5610,6 +5644,140 @@ export interface operations {
                             totalItems: number;
                             totalPages: number;
                         };
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    updateAdminUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque UUID identifier */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role: "USER" | "ADMIN" | "SUPER_ADMIN";
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description ISO 8601 UTC timestamp */
+                        createdAt: string;
+                        email: string | null;
+                        /** @description Opaque UUID identifier */
+                        id: string;
+                        phone: string | null;
+                        platformRole: "USER" | "ADMIN" | "SUPER_ADMIN";
+                        status: "PENDING_VERIFICATION" | "ACTIVE" | "SUSPENDED" | "DISABLED";
                     };
                 };
             };
@@ -5995,13 +6163,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    reason?: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Default Response */
             200: {
@@ -6020,6 +6182,139 @@ export interface operations {
                         status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
                         /** @description ISO 8601 UTC timestamp */
                         updatedAt: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    adminListVendorProviderAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque UUID identifier */
+                vendorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** @description ISO 8601 UTC timestamp */
+                            createdAt: string;
+                            externalSubaccountId: string;
+                            /** @description Opaque UUID identifier */
+                            id: string;
+                            provider: "PAYSTACK" | "FLUTTERWAVE";
+                            status: "PENDING" | "ACTIVE" | "SUSPENDED" | "DISABLED";
+                            /** @description ISO 8601 UTC timestamp */
+                            updatedAt: string;
+                            /** @description Opaque UUID identifier */
+                            vendorId: string;
+                        }[];
                     };
                 };
             };
@@ -6411,7 +6706,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    reason?: string;
+                    reason: string;
                 };
             };
         };
@@ -6547,7 +6842,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    reason?: string;
+                    reason: string;
                 };
             };
         };
@@ -6569,6 +6864,142 @@ export interface operations {
                         status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
                         /** @description ISO 8601 UTC timestamp */
                         updatedAt: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Default Response */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            code: string;
+                            details?: unknown;
+                            message: string;
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    adminListVendorVerifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque UUID identifier */
+                vendorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** @description ISO 8601 UTC timestamp */
+                            createdAt: string;
+                            expiresAt: string | null;
+                            /** @description Opaque UUID identifier */
+                            id: string;
+                            reference: string | null;
+                            reviewedAt: string | null;
+                            reviewedBy: string | null;
+                            status: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
+                            type: "BUSINESS" | "IDENTITY" | "BANK_ACCOUNT" | "OTHER";
+                            /** @description ISO 8601 UTC timestamp */
+                            updatedAt: string;
+                            /** @description Opaque UUID identifier */
+                            vendorId: string;
+                        }[];
                     };
                 };
             };
