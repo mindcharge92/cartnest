@@ -9,11 +9,23 @@ const database = createDatabaseClient({ connectionString });
 
 const categories = [
   { name: "Electronics", slug: "electronics", sortOrder: 10 },
-  { name: "Fashion", slug: "fashion", sortOrder: 20 },
-  { name: "Beauty", slug: "beauty", sortOrder: 30 },
-  { name: "Home & Living", slug: "home-and-living", sortOrder: 40 },
-  { name: "Groceries", slug: "groceries", sortOrder: 50 },
-  { name: "Accessories", slug: "accessories", sortOrder: 60 },
+  { name: "Phones & Tablets", slug: "phones-tablets", sortOrder: 20 },
+  { name: "Computing", slug: "computing", sortOrder: 30 },
+  { name: "Fashion", slug: "fashion", sortOrder: 40 },
+  { name: "Beauty & Personal Care", slug: "beauty", sortOrder: 50 },
+  { name: "Home & Living", slug: "home-and-living", sortOrder: 60 },
+  { name: "Groceries", slug: "groceries", sortOrder: 70 },
+  { name: "Accessories", slug: "accessories", sortOrder: 80 },
+  { name: "Appliances", slug: "appliances", sortOrder: 90 },
+  { name: "Gaming", slug: "gaming", sortOrder: 100 },
+  { name: "Sports & Fitness", slug: "sports-fitness", sortOrder: 110 },
+  { name: "Baby & Kids", slug: "baby-kids", sortOrder: 120 },
+  { name: "Health & Wellness", slug: "health-wellness", sortOrder: 130 },
+  { name: "Automotive", slug: "automotive", sortOrder: 140 },
+  { name: "Books & Stationery", slug: "books-stationery", sortOrder: 150 },
+  { name: "Office Supplies", slug: "office-supplies", sortOrder: 160 },
+  { name: "Jewelry & Watches", slug: "jewelry-watches", sortOrder: 170 },
+  { name: "Pet Supplies", slug: "pet-supplies", sortOrder: 180 },
 ] as const;
 
 const stores = [
